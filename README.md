@@ -25,6 +25,34 @@ k8s/prod/    manifests du namespace prod
 
 Dev et prod sont déployés indépendamment, chacun dans son namespace. Les fichiers sont volontairement simples (pas de Helm) : le chart Helm et ArgoCD viennent après, en bonus.
 
+## Secrets
+
+Les secrets ne sont dans aucun fichier : on les crée à la main, une fois par namespace, avant de déployer. Les valeurs sont aléatoires. Les noms sont ceux que les manifests référencent (`postgres-credentials`, `database-urls`, `jwt`).
+
+```bash
+NS=dev   # puis NS=prod
+PW=$(openssl rand -hex 16)
+DB="postgres:$PW@postgres:5432"
+
+kubectl -n $NS create secret generic postgres-credentials \
+  --from-literal=POSTGRES_USER=postgres \
+  --from-literal=POSTGRES_PASSWORD="$PW"
+
+# le driver dépend du service : psycopg, psycopg_async ou asyncpg
+kubectl -n $NS create secret generic database-urls \
+  --from-literal=main="postgresql+psycopg://$DB/main" \
+  --from-literal=live_chat="postgresql+psycopg_async://$DB/live_chat" \
+  --from-literal=replay="postgresql+asyncpg://$DB/replay" \
+  --from-literal=search="postgresql+asyncpg://$DB/search" \
+  --from-literal=bookmarks="postgresql+psycopg://$DB/bookmarks" \
+  --from-literal=stats="postgresql+psycopg://$DB/stats"
+
+kubectl -n $NS create secret generic jwt \
+  --from-literal=secret="$(openssl rand -hex 32)"
+```
+
+Le namespace doit exister (`kubectl apply -f k8s/$NS/00-namespace.yaml`). Pour refaire un secret : `kubectl -n $NS delete secret <nom>`, le recréer, puis `kubectl -n $NS rollout restart deployment`. Le mot de passe postgres n'est lu qu'à la création du volume : si on le change, il faut aussi supprimer le volume (`kubectl -n $NS delete pvc data-postgres-0`).
+
 ## Règles
 
 - Les secrets ne sont jamais dans ce repo : ils sont créés à part dans le cluster.
