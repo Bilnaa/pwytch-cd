@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bookmarks
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bookmarks
+  template:
+    metadata:
+      labels:
+        app: bookmarks
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      containers:
+        - name: bookmarks
+          image: ghcr.io/bilnaa/pwytch-bookmarks:2a5cb2c98f4a7abafdebac78b83286a2b92d524f
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-urls
+                  key: bookmarks
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: REDIS_URL
+            - name: MQTT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: MQTT_HOST
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bookmarks
+  namespace: dev
+spec:
+  selector:
+    app: bookmarks
+  ports:
+    - port: 8000
+      targetPort: 8000

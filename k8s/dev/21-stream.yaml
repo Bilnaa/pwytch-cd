@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stream
+  template:
+    metadata:
+      labels:
+        app: stream
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      containers:
+        - name: stream
+          image: ghcr.io/bilnaa/pwytch-stream:2a5cb2c98f4a7abafdebac78b83286a2b92d524f
+          ports:
+            - containerPort: 8000
+          env:
+            - name: LIVES_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: LIVES_DIR
+            - name: MQTT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: MQTT_HOST
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          volumeMounts:
+            - name: lives
+              mountPath: /data/lives
+      volumes:
+        - name: lives
+          persistentVolumeClaim:
+            claimName: stream-lives
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stream
+  namespace: dev
+spec:
+  selector:
+    app: stream
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+# Les segments HLS écrits par stream, relus par replay. ReadWriteOnce suffit : un seul node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stream-lives
+  namespace: dev
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

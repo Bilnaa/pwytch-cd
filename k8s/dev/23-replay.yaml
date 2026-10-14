@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: replay
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: replay
+  template:
+    metadata:
+      labels:
+        app: replay
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      containers:
+        - name: replay
+          image: ghcr.io/bilnaa/pwytch-replay:2a5cb2c98f4a7abafdebac78b83286a2b92d524f
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-urls
+                  key: replay
+            - name: MQTT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: MQTT_HOST
+            - name: LIVES_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: LIVES_DIR
+            - name: REPLAYS_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: REPLAYS_DIR
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          volumeMounts:
+            - name: lives
+              mountPath: /data/lives
+              readOnly: true
+            - name: replays
+              mountPath: /data/replays
+      volumes:
+        - name: lives
+          persistentVolumeClaim:
+            claimName: stream-lives
+        - name: replays
+          persistentVolumeClaim:
+            claimName: replay-files
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: replay
+  namespace: dev
+spec:
+  selector:
+    app: replay
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: replay-files
+  namespace: dev
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
