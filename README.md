@@ -31,7 +31,7 @@ Les deux namespaces ont les mêmes manifests (seuls le namespace et `FRONTEND_OR
 
 ```mermaid
 flowchart TB
-  user[navigateur] -->|pwytch.dev| ing[Ingress nginx]
+  user[navigateur] -->|pwytch.test| ing[Ingress nginx]
   ing --> main
   main -->|HTTP| stream & livechat[live-chat] & replay & search & bookmarks & stats
   main & livechat & replay & search & bookmarks & stats --> pg[(postgres<br/>StatefulSet + PVC)]
@@ -52,7 +52,7 @@ Les flèches viennent du ConfigMap `pwytch-config` et des variables des Deployme
 | `redis` | cache | Deployment, sans volume |
 | `mosquitto` (Service `mqtt`) | broker MQTT, messages en direct | Deployment, sans volume |
 | `stream-lives`, `replay-files` | fichiers des lives (écrits par stream, lus par replay) et des replays | PVC 1 Gi |
-| Ingress `pwytch` | `pwytch.dev` / `pwytch.prd` vers `main:8000` | Ingress (nginx) |
+| Ingress `pwytch` | `pwytch.test` / `pwytch.prd` vers `main:8000` | Ingress (nginx) |
 
 Chaque service a trois probes HTTP (startup, readiness, liveness), voir [Vérifier](#vérifier-les-ressources).
 
@@ -142,7 +142,7 @@ Toutes ces commandes sont de la lecture seule. Remplacer `dev` par `prod` au bes
 kubectl get pods -n dev                       # tout doit être Running, READY 1/1
 kubectl get deploy,statefulset -n dev         # 7 services + redis + mosquitto, et postgres
 kubectl get svc -n dev                        # un Service ClusterIP par brique
-kubectl get ingress -n dev                    # host pwytch.dev (pwytch.prd en prod)
+kubectl get ingress -n dev                    # host pwytch.test (pwytch.prd en prod)
 kubectl get pvc -n dev                        # data-postgres-0, replay-files, stream-lives : Bound
 kubectl get secret -n dev                     # database-urls, jwt, postgres-credentials
 kubectl get ns                                # dev, prod (et argocd si installé)
@@ -154,7 +154,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl http://pwytch.dev/api/health
+curl http://pwytch.test/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -175,17 +175,19 @@ Workflows et runner : onglet Actions du repo, ou sur la machine du runner : `sys
 
 | Environnement | URL |
 |---|---|
-| dev | http://pwytch.dev |
+| dev | http://pwytch.test |
 | prod | http://pwytch.prd |
 | ArgoCD | http://127.0.0.1:8081 (service `argocd-forward`, détails : [`argocd/README.md`](argocd/README.md)) |
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.test` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
 ```
-<IP de la machine qui héberge Minikube>  pwytch.dev pwytch.prd
+<IP de la machine qui héberge Minikube>  pwytch.test pwytch.prd
 ```
+
+Le domaine `.dev` est à éviter : les navigateurs le forcent en https (liste HSTS préchargée), alors que les environnements ne sont servis qu'en http. `.test` est réservé à cet usage.
 
 Le contrôleur d'ingress est exposé sur le port **80** de la machine qui héberge Minikube, par un service systemd (`ingress-80`, un `kubectl port-forward` lié à l'adresse de cette machine). Si la page ne répond plus, vérifier ce service : `systemctl status ingress-80`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** le service.
 
