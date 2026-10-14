@@ -63,11 +63,7 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 127.0.0.1  pwytch.dev pwytch.prd
 ```
 
-Minikube tourne dans une VM, il faut donc aussi exposer le contrôleur d'ingress sur le port 80 de la VM (Lima le relaie vers la machine hôte). Dans la VM :
-
-```bash
-sudo KUBECONFIG=$HOME/.kube/config kubectl -n ingress-nginx port-forward --address 0.0.0.0 svc/ingress-nginx-controller 80:80
-```
+Minikube tourne dans une VM Lima : le contrôleur d'ingress est exposé sur le port 80 de la VM par un service systemd (`ingress-forward`, un `kubectl port-forward` limité à `127.0.0.1`), que Lima relaie vers la machine hôte. Si la page ne répond plus, vérifier ce service dans la VM : `systemctl status ingress-forward`.
 
 Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:80:127.0.0.1 http://pwytch.dev/api/health`.
 
