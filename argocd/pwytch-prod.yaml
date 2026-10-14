@@ -14,4 +14,14 @@ spec:
     namespace: prod
   # Pas de syncPolicy.automated : la prod ne se déploie que par un sync manuel
   # (UI : bouton SYNC, ou `argocd app sync pwytch-prod`).
-  syncPolicy: {}
+  # Le cluster complète les volumeClaimTemplates (apiVersion, kind, status...) : sans ça, ArgoCD voit postgres OutOfSync en permanence.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: postgres
+      jsonPointers:
+        - /spec/volumeClaimTemplates
+  syncPolicy:
+    syncOptions:
+      # server-side, comme les workflows du runner : chaque outil garde ses champs (voir argocd/README.md)
+      - ServerSideApply=true
