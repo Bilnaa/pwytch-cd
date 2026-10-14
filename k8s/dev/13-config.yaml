@@ -1,0 +1,18 @@
+# Configuration non secrète, lue par les services. Pour la changer : modifier ici, appliquer, puis redémarrer les pods.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pwytch-config
+  namespace: dev
+data:
+  STREAM_URL: http://stream:8000
+  LIVE_CHAT_URL: http://live-chat:8000
+  REPLAY_URL: http://replay:8000
+  SEARCH_URL: http://search:8000
+  STATS_URL: http://stats:8000
+  BOOKMARKS_URL: http://bookmarks:8000
+  FRONTEND_ORIGIN: http://pwytch.dev
+  MQTT_HOST: mqtt
+  REDIS_URL: redis://redis:6379/0
+  LIVES_DIR: /data/lives
+  REPLAYS_DIR: /data/replays

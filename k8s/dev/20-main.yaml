@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: main
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: main
+  template:
+    metadata:
+      labels:
+        app: main
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      containers:
+        - name: main
+          image: ghcr.io/bilnaa/pwytch-main:2a5cb2c98f4a7abafdebac78b83286a2b92d524f
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-urls
+                  key: main
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jwt
+                  key: secret
+            - name: STREAM_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: STREAM_URL
+            - name: LIVE_CHAT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: LIVE_CHAT_URL
+            - name: REPLAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: REPLAY_URL
+            - name: SEARCH_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: SEARCH_URL
+            - name: STATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: STATS_URL
+            - name: BOOKMARKS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: BOOKMARKS_URL
+            - name: FRONTEND_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: FRONTEND_ORIGIN
+            - name: MQTT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: pwytch-config
+                  key: MQTT_HOST
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: main
+  namespace: dev
+spec:
+  selector:
+    app: main
+  ports:
+    - port: 8000
+      targetPort: 8000
