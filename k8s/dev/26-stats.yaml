@@ -15,6 +15,14 @@ spec:
     spec:
       # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
       enableServiceLinks: false
+      # attend que postgres réponde : sans ça, l'appli démarre avant le DNS ou la base et plante au premier essai
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:18.0-alpine
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
       containers:
         - name: stats
           image: ghcr.io/bilnaa/pwytch-stats:e68b75b6e41ac90669c4661cb3c65f7ff65cce1f
