@@ -13,7 +13,7 @@ flowchart LR
   dev[push sur develop] --> ci[repo pwytch<br/>build-images.yml]
   ci -->|image:sha| ghcr[(ghcr.io<br/>pwytch-service:sha)]
   ci -->|commit des tags<br/>deploy key| cd[repo pwytch-cd<br/>k8s/dev]
-  cd -->|push sur main| runner[runner self-hosted<br/>VM Lima]
+  cd -->|push sur main| runner[runner self-hosted<br/>à côté de Minikube]
   runner -->|kubectl apply| mk[Minikube<br/>namespace dev]
   ghcr -.->|pull des images| mk
   man[lancement manuel<br/>deploy-prod, tag] --> runner
@@ -68,7 +68,7 @@ Les manifests sont en YAML simple (pas de Helm). Un chart Helm est une évolutio
 
 ## Prérequis et cluster
 
-- Linux ou une VM (ici une VM Lima Ubuntu arm64 nommée `gh-runner`, Docker rootful), `docker`, `kubectl`, `minikube`.
+- Une machine Linux ou macOS avec `docker`, `kubectl` et `minikube`.
 - Un cluster Minikube avec l'addon ingress :
 
 ```bash
@@ -79,7 +79,7 @@ kubectl get nodes        # le noeud doit être Ready
 
 (`minikube start` et `addons enable` ne sont pas rejoués ici, le cluster existait déjà ; l'état a été vérifié avec `minikube status` et `kubectl get nodes`.)
 
-- Un runner GitHub self-hosted enregistré sur ce repo (Settings > Actions > Runners) avec le label `pwytch-vm`, installé dans la même VM que Minikube, avec `kubectl` configuré sur le cluster. Il tourne comme service systemd (`actions.runner.Bilnaa-pwytch-cd.lima-gh-runner.service`). Le workflow le cible avec `runs-on: [self-hosted, pwytch-vm]`.
+- Un runner GitHub self-hosted enregistré sur ce repo (Settings > Actions > Runners) avec le label `pwytch-vm`, installé sur la même machine que Minikube, avec `kubectl` configuré sur le cluster. Il tourne comme service systemd (`actions.runner.Bilnaa-pwytch-cd.lima-gh-runner.service`). Le workflow le cible avec `runs-on: [self-hosted, pwytch-vm]`.
 - Dans les repos GitHub : le repo CI a le secret `CD_DEPLOY_KEY` (clé privée dont la clé publique est une deploy key avec écriture sur ce repo).
 
 ## Déployer
@@ -98,7 +98,7 @@ Aucun secret n'est dans Git : voir [Secrets](#secrets-détail-de-létape-2) plus
 
 ### 3. Dev : automatique
 
-Un push sur `main` qui touche `k8s/dev/**` lance `deploy-dev` : `kubectl apply -f k8s/dev`, attente du rollout de chaque Deployment et StatefulSet, puis `kubectl get pods`. En pratique, on ne le fait pas à la main : c'est la CI du repo `pwytch` qui commit les nouveaux tags. Premier déploiement ou relance : onglet Actions > deploy-dev > Run workflow, ou en local depuis la VM : `kubectl apply -f k8s/dev`.
+Un push sur `main` qui touche `k8s/dev/**` lance `deploy-dev` : `kubectl apply -f k8s/dev`, attente du rollout de chaque Deployment et StatefulSet, puis `kubectl get pods`. En pratique, on ne le fait pas à la main : c'est la CI du repo `pwytch` qui commit les nouveaux tags. Premier déploiement ou relance : onglet Actions > deploy-dev > Run workflow, ou en local depuis la machine du cluster : `kubectl apply -f k8s/dev`.
 
 ### 4. Prod : manuel, par promotion
 
@@ -136,7 +136,7 @@ Le namespace doit exister (étape 1). Pour refaire un secret : `kubectl -n $NS d
 
 ## Vérifier les ressources
 
-Toutes ces commandes sont de la lecture seule. Remplacer `dev` par `prod` au besoin. Dans la VM : `limactl shell gh-runner kubectl ...`.
+Toutes ces commandes sont de la lecture seule. Remplacer `dev` par `prod` au besoin.
 
 ```bash
 kubectl get pods -n dev                       # tout doit être Running, READY 1/1
@@ -154,7 +154,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl --resolve pwytch.dev:443:192.168.64.7 https://pwytch.dev/api/health
+curl https://pwytch.dev/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -167,9 +167,9 @@ kubectl -n dev logs deploy/stream --previous  # conteneur précédent, après un
 kubectl -n dev logs -f deploy/replay          # suivre en direct
 ```
 
-Probes (HTTP, port 8000) : `startupProbe` laisse jusqu'à 150 s pour démarrer, `readinessProbe` retire un pod du Service s'il ne répond pas, `livenessProbe` le redémarre s'il ne répond plus. Route `/health` pour les 6 services, `/api` pour `main` : pas `/api/health`, sinon un service en panne ferait redémarrer `main` pour rien. Un nombre de `RESTARTS` non nul juste après un démarrage de VM est normal (les pods attendent postgres et le broker) ; s'il continue de monter, regarder `describe` et `logs --previous`.
+Probes (HTTP, port 8000) : `startupProbe` laisse jusqu'à 150 s pour démarrer, `readinessProbe` retire un pod du Service s'il ne répond pas, `livenessProbe` le redémarre s'il ne répond plus. Route `/health` pour les 6 services, `/api` pour `main` : pas `/api/health`, sinon un service en panne ferait redémarrer `main` pour rien. Un nombre de `RESTARTS` non nul juste après un démarrage du cluster est normal (les pods attendent postgres et le broker) ; s'il continue de monter, regarder `describe` et `logs --previous`.
 
-Workflows et runner : onglet Actions du repo, ou dans la VM `systemctl status actions.runner.Bilnaa-pwytch-cd.lima-gh-runner.service`.
+Workflows et runner : onglet Actions du repo, ou sur la machine du runner : `systemctl status actions.runner.Bilnaa-pwytch-cd.*.service`.
 
 ## Accéder aux applications
 
@@ -177,17 +177,17 @@ Workflows et runner : onglet Actions du repo, ou dans la VM `systemctl status ac
 |---|---|
 | dev | https://pwytch.dev |
 | prod | https://pwytch.prd |
-| ArgoCD | http://127.0.0.1:8081 (service `argocd-forward` de la VM, détails : [`argocd/README.md`](argocd/README.md)) |
+| ArgoCD | http://127.0.0.1:8081 (service `argocd-forward`, détails : [`argocd/README.md`](argocd/README.md)) |
 
 Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.dev` pour dev et `https://pwytch.prd` pour prod (le http est redirigé vers le https). Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
 ```
-192.168.64.7  pwytch.dev pwytch.prd   # IP de la VM : `limactl shell gh-runner ip -4 -o addr show lima0`
+<IP de la machine qui héberge Minikube>  pwytch.dev pwytch.prd
 ```
 
-Minikube tourne dans une VM Lima qui a sa propre IP privée (`vzNAT: true` dans `~/.lima/gh-runner/lima.yaml`, interface `lima0`), joignable depuis le Mac uniquement. Le contrôleur d'ingress y est exposé sur les ports **80 et 443** par deux services systemd (`ingress-80` et `ingress-443`, des `kubectl port-forward` liés à l'IP de la VM). Rien n'est ouvert sur le Mac lui-même, ni sur le réseau local. Si la page ne répond plus, vérifier dans la VM : `systemctl status ingress-80 ingress-443`. Si l'IP de la VM change, mettre à jour `/etc/hosts` **et** les deux services (`sudo systemctl edit --full ingress-80`).
+Le contrôleur d'ingress est exposé sur les ports **80 et 443** de la machine qui héberge Minikube, par deux services systemd (`ingress-80` et `ingress-443`, des `kubectl port-forward` liés à l'adresse de cette machine). Si la page ne répond plus, vérifier ces services : `systemctl status ingress-80 ingress-443`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** les deux services.
 
 ### Certificat https
 
@@ -198,14 +198,12 @@ brew install mkcert
 mkcert -install   # approuve l'autorité locale sur le Mac (mot de passe demandé)
 mkcert -cert-file tls.crt -key-file tls.key pwytch.dev pwytch.prd
 
-# à lancer pour dev et pour prod, depuis la VM (copier tls.crt et tls.key dedans)
+# à lancer pour dev et pour prod, avec kubectl sur le cluster
 kubectl -n dev create secret tls pwytch-tls --cert=tls.crt --key=tls.key
 kubectl -n prod create secret tls pwytch-tls --cert=tls.crt --key=tls.key
 ```
 
 Supprimer ensuite `tls.crt` et `tls.key` du Mac. La clé de l'autorité locale (`mkcert -CAROOT`) permet de signer n'importe quel certificat : ne jamais la partager.
-
-Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:443:192.168.64.7 https://pwytch.dev/api/health`.
 
 ## ArgoCD
 
@@ -237,9 +235,9 @@ Le tag est le sha complet du commit : on sait exactement quel code tourne, un ta
 
 La CI écrit dans `pwytch-cd` avec une deploy key (`CD_DEPLOY_KEY`) : elle n'a accès qu'à ce repo, alors qu'un token personnel donnerait accès à tous les repos du compte et disparaîtrait avec lui. Un commit poussé avec cette clé depuis un autre repo ne relance pas le workflow de build.
 
-### Runner self-hosted dans une VM
+### Runner self-hosted
 
-Minikube n'est pas joignable depuis les runners GitHub. Le runner est donc installé dans la VM, à côté du cluster : il applique les manifests localement, sans exposer l'API Kubernetes ni stocker de kubeconfig dans GitHub. La VM isole le runner du Mac : il n'a pas accès au reste de la machine. Comme un runner self-hosted exécute du code, les workflows n'ont pas de trigger `pull_request` : il n'exécute jamais de code venant d'un fork.
+Minikube n'est pas joignable depuis les runners GitHub. Le runner est donc installé à côté du cluster : il applique les manifests localement, sans exposer l'API Kubernetes ni stocker de kubeconfig dans GitHub. Comme un runner self-hosted exécute du code, les workflows n'ont pas de trigger `pull_request` : il n'exécute jamais de code venant d'un fork.
 
 ### Dev automatique, prod manuelle
 
@@ -252,7 +250,7 @@ Jamais dans Git, y compris chiffrés : créés une fois par namespace avec des v
 ### Autres détails
 
 - `enableServiceLinks: false` : sinon Kubernetes injecte `MQTT_PORT=tcp://...` depuis le Service `mqtt`, ce qui casse la config des applis.
-- Ingress sur les ports 80 (http) et 443 (https) de l'IP de la VM : voir [Accéder aux applications](#accéder-aux-applications).
+- Ingress sur les ports 80 (http) et 443 (https) : voir [Accéder aux applications](#accéder-aux-applications).
 - Le host de l'Ingress est le même que `FRONTEND_ORIGIN` du ConfigMap (CORS).
 
 ## Règles
