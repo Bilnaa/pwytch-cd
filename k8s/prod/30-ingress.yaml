@@ -6,10 +6,6 @@ metadata:
   namespace: prod
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - pwytch.prd
-      secretName: pwytch-tls # créé à la main avec mkcert, jamais dans Git
   rules:
     - host: pwytch.prd
       http:

@@ -154,7 +154,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl https://pwytch.dev/api/health
+curl http://pwytch.dev/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -175,11 +175,11 @@ Workflows et runner : onglet Actions du repo, ou sur la machine du runner : `sys
 
 | Environnement | URL |
 |---|---|
-| dev | https://pwytch.dev |
-| prod | https://pwytch.prd |
+| dev | http://pwytch.dev |
+| prod | http://pwytch.prd |
 | ArgoCD | http://127.0.0.1:8081 (service `argocd-forward`, détails : [`argocd/README.md`](argocd/README.md)) |
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.dev` pour dev et `https://pwytch.prd` pour prod (le http est redirigé vers le https). Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
@@ -187,23 +187,7 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 <IP de la machine qui héberge Minikube>  pwytch.dev pwytch.prd
 ```
 
-Le contrôleur d'ingress est exposé sur les ports **80 et 443** de la machine qui héberge Minikube, par deux services systemd (`ingress-80` et `ingress-443`, des `kubectl port-forward` liés à l'adresse de cette machine). Si la page ne répond plus, vérifier ces services : `systemctl status ingress-80 ingress-443`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** les deux services.
-
-### Certificat https
-
-Le certificat est émis par [mkcert](https://github.com/FiloSottile/mkcert), dont l'autorité locale est approuvée dans le trousseau du Mac. Il n'est pas dans Git : il est créé à la main, une fois, comme les autres secrets.
-
-```bash
-brew install mkcert
-mkcert -install   # approuve l'autorité locale sur le Mac (mot de passe demandé)
-mkcert -cert-file tls.crt -key-file tls.key pwytch.dev pwytch.prd
-
-# à lancer pour dev et pour prod, avec kubectl sur le cluster
-kubectl -n dev create secret tls pwytch-tls --cert=tls.crt --key=tls.key
-kubectl -n prod create secret tls pwytch-tls --cert=tls.crt --key=tls.key
-```
-
-Supprimer ensuite `tls.crt` et `tls.key` du Mac. La clé de l'autorité locale (`mkcert -CAROOT`) permet de signer n'importe quel certificat : ne jamais la partager.
+Le contrôleur d'ingress est exposé sur le port **80** de la machine qui héberge Minikube, par un service systemd (`ingress-80`, un `kubectl port-forward` lié à l'adresse de cette machine). Si la page ne répond plus, vérifier ce service : `systemctl status ingress-80`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** le service.
 
 ## ArgoCD
 
@@ -250,7 +234,7 @@ Jamais dans Git, y compris chiffrés : créés une fois par namespace avec des v
 ### Autres détails
 
 - `enableServiceLinks: false` : sinon Kubernetes injecte `MQTT_PORT=tcp://...` depuis le Service `mqtt`, ce qui casse la config des applis.
-- Ingress sur les ports 80 (http) et 443 (https) : voir [Accéder aux applications](#accéder-aux-applications).
+- Ingress sur le port 80 : voir [Accéder aux applications](#accéder-aux-applications).
 - Le host de l'Ingress est le même que `FRONTEND_ORIGIN` du ConfigMap (CORS).
 
 ## Règles
