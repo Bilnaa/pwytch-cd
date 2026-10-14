@@ -1,12 +1,18 @@
 # CD de prod : lancé uniquement à la main. Applique k8s/prod sur Minikube avec le runner self-hosted.
+# Avec un tag en entrée, il met d'abord à jour les images de prod (promotion), commit, puis applique.
 # Ne touche jamais au namespace dev.
 name: deploy-prod
 
 on:
   workflow_dispatch: # jamais automatique : la prod change quand on le décide
+    inputs:
+      tag:
+        description: "Tag à promouvoir en prod (sha complet de 40 caractères). Vide : applique k8s/prod tel quel"
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write # pour commit le nouveau tag
 
 concurrency:
   group: deploy-prod
@@ -17,6 +23,24 @@ jobs:
     runs-on: [self-hosted, pwytch-vm]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Promouvoir le tag
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::le tag doit être un sha complet de 40 caractères hexadécimaux"; exit 1; }
+          sed -i -E "s#(ghcr.io/bilnaa/pwytch-[a-z-]+):[0-9a-f]{40}#\1:${TAG}#" k8s/prod/*.yaml
+          git diff --stat
+          if git diff --quiet; then
+            echo "la prod est déjà sur ce tag"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "deploy(prod): promote ${TAG::7}"
+            git pull --rebase
+            git push
+          fi
 
       - name: Appliquer les manifests de prod
         run: kubectl apply -f k8s/prod
