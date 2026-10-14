@@ -1,0 +1,35 @@
+# CD de dev : chaque commit sur main qui touche k8s/dev est appliqué sur Minikube par le runner self-hosted.
+# Ne touche jamais au namespace prod.
+name: deploy-dev
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/dev/**"
+  workflow_dispatch: # lancement à la main depuis l'onglet Actions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pwytch-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Appliquer les manifests de dev
+        run: kubectl apply -f k8s/dev
+
+      - name: Attendre la fin du déploiement
+        run: |
+          for r in $(kubectl -n dev get deployments,statefulsets -o name); do
+            kubectl -n dev rollout status "$r" --timeout=180s
+          done
+
+      - name: État du namespace dev
+        run: kubectl -n dev get pods
