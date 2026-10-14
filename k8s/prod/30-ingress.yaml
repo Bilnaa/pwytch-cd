@@ -1,0 +1,19 @@
+# Point d'entrée de l'environnement : tout passe par main, qui sert le front et /api.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pwytch
+  namespace: prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: pwytch.prd
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: main
+                port:
+                  number: 8000
