@@ -1,0 +1,31 @@
+# CD de prod : lancé uniquement à la main. Applique k8s/prod sur Minikube avec le runner self-hosted.
+# Ne touche jamais au namespace dev.
+name: deploy-prod
+
+on:
+  workflow_dispatch: # jamais automatique : la prod change quand on le décide
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pwytch-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Appliquer les manifests de prod
+        run: kubectl apply -f k8s/prod
+
+      - name: Attendre la fin du déploiement
+        run: |
+          for r in $(kubectl -n prod get deployments,statefulsets -o name); do
+            kubectl -n prod rollout status "$r" --timeout=180s
+          done
+
+      - name: État du namespace prod
+        run: kubectl -n prod get pods
