@@ -17,7 +17,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: search
-          image: ghcr.io/bilnaa/pwytch-search:2a5cb2c98f4a7abafdebac78b83286a2b92d524f
+          image: ghcr.io/bilnaa/pwytch-search:e68b75b6e41ac90669c4661cb3c65f7ff65cce1f
           ports:
             - containerPort: 8000
           env:
