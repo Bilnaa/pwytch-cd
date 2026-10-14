@@ -53,6 +53,24 @@ kubectl -n $NS create secret generic jwt \
 
 Le namespace doit exister (`kubectl apply -f k8s/$NS/00-namespace.yaml`). Pour refaire un secret : `kubectl -n $NS delete secret <nom>`, le recréer, puis `kubectl -n $NS rollout restart deployment`. Le mot de passe postgres n'est lu qu'à la création du volume : si on le change, il faut aussi supprimer le volume (`kubectl -n $NS delete pvc data-postgres-0`).
 
+## Accéder aux applications
+
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+
+Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
+
+```
+127.0.0.1  pwytch.dev pwytch.prd
+```
+
+Minikube tourne dans une VM, il faut donc aussi exposer le contrôleur d'ingress sur le port 80 de la VM (Lima le relaie vers la machine hôte). Dans la VM :
+
+```bash
+sudo KUBECONFIG=$HOME/.kube/config kubectl -n ingress-nginx port-forward --address 0.0.0.0 svc/ingress-nginx-controller 80:80
+```
+
+Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:80:127.0.0.1 http://pwytch.dev/api/health`.
+
 ## Règles
 
 - Les secrets ne sont jamais dans ce repo : ils sont créés à part dans le cluster.
