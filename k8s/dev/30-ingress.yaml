@@ -4,9 +4,6 @@ kind: Ingress
 metadata:
   name: pwytch
   namespace: dev
-  annotations:
-    # pas de redirection vers https : elle pointerait vers le port 443, qui n'est pas ouvert (8080 http et 8443 https)
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
