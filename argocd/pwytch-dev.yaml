@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pwytch-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bilnaa/pwytch-cd
+    targetRevision: main
+    path: k8s/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    # Sync automatique : tout commit sur main qui touche k8s/dev est appliqué.
+    automated:
+      prune: false   # rien n'est supprimé automatiquement
+      selfHeal: true # une modification manuelle dans le cluster est annulée

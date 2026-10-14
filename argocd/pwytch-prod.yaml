@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pwytch-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bilnaa/pwytch-cd
+    targetRevision: main
+    path: k8s/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  # Pas de syncPolicy.automated : la prod ne se déploie que par un sync manuel
+  # (UI : bouton SYNC, ou `argocd app sync pwytch-prod`).
+  syncPolicy: {}
