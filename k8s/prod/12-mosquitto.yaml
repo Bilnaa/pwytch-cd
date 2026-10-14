@@ -1,0 +1,64 @@
+# mosquitto : Deployment sans volume, le broker ne garde rien d'important (messages en direct)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: prod
+data:
+  mosquitto.conf: |
+    listener 1883
+
+    allow_anonymous true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt
+  namespace: prod
+spec:
+  selector:
+    app: mosquitto
+  ports:
+    - port: 1883
+      targetPort: 1883
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:2.1.2-alpine
+          ports:
+            - containerPort: 1883
+          readinessProbe:
+            tcpSocket:
+              port: 1883
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: mosquitto-config
