@@ -22,11 +22,27 @@ kubectl -n argocd wait --for=condition=Ready pod --all --timeout=300s
 
 ## Accès à l'interface
 
-Le port-forward est lancé à la demande (jamais plus large que `127.0.0.1`, port > 1024). Dans la VM Lima, Lima le relaie vers `127.0.0.1` du Mac :
+L'interface est servie sur `127.0.0.1:8081` par un service systemd de la VM, `argocd-forward` (un `kubectl port-forward --address 127.0.0.1 svc/argocd-server 8081:80`, jamais plus large que `127.0.0.1`, port > 1024), que Lima relaie vers `127.0.0.1` du Mac. Il démarre avec la VM et redémarre tout seul. Création, une fois, dans la VM :
 
 ```bash
-kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8081:80
+sudo tee /etc/systemd/system/argocd-forward.service >/dev/null <<UNIT
+[Unit]
+Description=Expose the ArgoCD interface on 127.0.0.1:8081 (http)
+After=network-online.target docker.service
+
+[Service]
+Environment=KUBECONFIG=$HOME/.kube/config
+ExecStart=/usr/local/bin/kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8081:80
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload && sudo systemctl enable --now argocd-forward
 ```
+
+Si la page ne répond plus : `systemctl status argocd-forward` dans la VM (et la VM elle-même doit tourner : `limactl ls`).
 
 Puis ouvrir http://127.0.0.1:8081 (utilisateur `admin`). Test : `curl http://127.0.0.1:8081`.
 
