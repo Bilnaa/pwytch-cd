@@ -55,7 +55,7 @@ Le namespace doit exister (`kubectl apply -f k8s/$NS/00-namespace.yaml`). Pour r
 
 ## Accéder aux applications
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev:8080` pour dev et `http://pwytch.prd:8080` pour prod. Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
@@ -63,9 +63,9 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 127.0.0.1  pwytch.dev pwytch.prd
 ```
 
-Minikube tourne dans une VM Lima : le contrôleur d'ingress est exposé sur le port 80 de la VM par un service systemd (`ingress-forward`, un `kubectl port-forward` limité à `127.0.0.1`), que Lima relaie vers la machine hôte. Si la page ne répond plus, vérifier ce service dans la VM : `systemctl status ingress-forward`.
+Minikube tourne dans une VM Lima : le contrôleur d'ingress est exposé sur le port 8080 de la VM par un service systemd (`ingress-forward`, un `kubectl port-forward` limité à `127.0.0.1`), que Lima relaie vers `127.0.0.1:8080` de la machine hôte. Le port 80 n'est pas utilisé : macOS ne permet de l'ouvrir que sur toutes les interfaces, donc visible du réseau. Si la page ne répond plus, vérifier ce service dans la VM : `systemctl status ingress-forward`.
 
-Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:80:127.0.0.1 http://pwytch.dev/api/health`.
+Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:8080:127.0.0.1 http://pwytch.dev:8080/api/health`.
 
 ## Règles
 
