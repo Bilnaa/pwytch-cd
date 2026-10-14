@@ -11,7 +11,7 @@ data:
   SEARCH_URL: http://search:8000
   STATS_URL: http://stats:8000
   BOOKMARKS_URL: http://bookmarks:8000
-  FRONTEND_ORIGIN: https://pwytch.prd
+  FRONTEND_ORIGIN: http://pwytch.prd
   MQTT_HOST: mqtt
   REDIS_URL: redis://redis:6379/0
   LIVES_DIR: /data/lives
