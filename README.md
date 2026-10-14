@@ -177,7 +177,7 @@ Workflows et runner : onglet Actions du repo, ou dans la VM `systemctl status ac
 |---|---|
 | dev | https://pwytch.dev |
 | prod | https://pwytch.prd |
-| ArgoCD | http://127.0.0.1:8081, après `kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8081:80` dans la VM (détails : [`argocd/README.md`](argocd/README.md)) |
+| ArgoCD | http://127.0.0.1:8081 (service `argocd-forward` de la VM, détails : [`argocd/README.md`](argocd/README.md)) |
 
 Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.dev` pour dev et `https://pwytch.prd` pour prod (le http est redirigé vers le https). Tout passe par `main`, qui sert le front et `/api`.
 
