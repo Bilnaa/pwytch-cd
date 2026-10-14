@@ -79,7 +79,7 @@ kubectl get nodes        # le noeud doit être Ready
 
 (`minikube start` et `addons enable` ne sont pas rejoués ici, le cluster existait déjà ; l'état a été vérifié avec `minikube status` et `kubectl get nodes`.)
 
-- Un runner GitHub self-hosted enregistré sur ce repo (Settings > Actions > Runners) avec le label `pwytch-vm`, installé sur la même machine que Minikube, avec `kubectl` configuré sur le cluster. Il tourne comme service systemd (`actions.runner.Bilnaa-pwytch-cd.lima-gh-runner.service`). Le workflow le cible avec `runs-on: [self-hosted, pwytch-vm]`.
+- Un runner GitHub self-hosted enregistré sur ce repo (Settings > Actions > Runners) avec le label `pwytch-vm`, installé sur la même machine que Minikube, avec `kubectl` configuré sur le cluster. Il tourne comme service systemd (`actions.runner.Bilnaa-pwytch-cd.*.service`). Le workflow le cible avec `runs-on: [self-hosted, pwytch-vm]`.
 - Dans les repos GitHub : le repo CI a le secret `CD_DEPLOY_KEY` (clé privée dont la clé publique est une deploy key avec écriture sur ce repo).
 
 ## Déployer
