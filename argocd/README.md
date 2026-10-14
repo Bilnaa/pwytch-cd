@@ -22,7 +22,7 @@ kubectl -n argocd wait --for=condition=Ready pod --all --timeout=300s
 
 ## Accès à l'interface
 
-L'interface est servie sur `127.0.0.1:8081` par un service systemd de la VM, `argocd-forward` (un `kubectl port-forward --address 127.0.0.1 svc/argocd-server 8081:80`, jamais plus large que `127.0.0.1`, port > 1024), que Lima relaie vers `127.0.0.1` du Mac. Il démarre avec la VM et redémarre tout seul. Création, une fois, dans la VM :
+L'interface est servie sur `127.0.0.1:8081` par un service systemd, `argocd-forward` (un `kubectl port-forward --address 127.0.0.1 svc/argocd-server 8081:80`, jamais plus large que `127.0.0.1`, port > 1024). Il démarre avec la machine et redémarre tout seul. Création, une fois, sur la machine qui héberge Minikube :
 
 ```bash
 sudo tee /etc/systemd/system/argocd-forward.service >/dev/null <<UNIT
@@ -42,7 +42,7 @@ UNIT
 sudo systemctl daemon-reload && sudo systemctl enable --now argocd-forward
 ```
 
-Si la page ne répond plus : `systemctl status argocd-forward` dans la VM (et la VM elle-même doit tourner : `limactl ls`).
+Si la page ne répond plus : `systemctl status argocd-forward`.
 
 Puis ouvrir http://127.0.0.1:8081 (utilisateur `admin`). Test : `curl http://127.0.0.1:8081`.
 
