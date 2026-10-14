@@ -31,7 +31,7 @@ Les deux namespaces ont les mêmes manifests (seuls le namespace et `FRONTEND_OR
 
 ```mermaid
 flowchart TB
-  user[navigateur] -->|pwytch.dev:8080| ing[Ingress nginx]
+  user[navigateur] -->|pwytch.dev:8443| ing[Ingress nginx]
   ing --> main
   main -->|HTTP| stream & livechat[live-chat] & replay & search & bookmarks & stats
   main & livechat & replay & search & bookmarks & stats --> pg[(postgres<br/>StatefulSet + PVC)]
@@ -154,7 +154,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl --resolve pwytch.dev:8080:127.0.0.1 http://pwytch.dev:8080/api/health
+curl --resolve pwytch.dev:8443:127.0.0.1 https://pwytch.dev:8443/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -175,11 +175,11 @@ Workflows et runner : onglet Actions du repo, ou dans la VM `systemctl status ac
 
 | Environnement | URL |
 |---|---|
-| dev | http://pwytch.dev:8080 |
-| prod | http://pwytch.prd:8080 |
+| dev | https://pwytch.dev:8443 (ou http://pwytch.dev:8080) |
+| prod | https://pwytch.prd:8443 (ou http://pwytch.prd:8080) |
 | ArgoCD | https://127.0.0.1:8081, après `kubectl -n argocd port-forward --address 127.0.0.1 svc/argocd-server 8081:443` dans la VM (détails : [`argocd/README.md`](argocd/README.md)) |
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.dev:8080` pour dev et `http://pwytch.prd:8080` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.dev:8443` pour dev et `https://pwytch.prd:8443` pour prod (le http sur 8080 marche aussi, sans redirection). Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
@@ -187,9 +187,25 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 127.0.0.1  pwytch.dev pwytch.prd
 ```
 
-Minikube tourne dans une VM Lima : le contrôleur d'ingress est exposé sur le port 8080 de la VM par un service systemd (`ingress-forward`, un `kubectl port-forward` limité à `127.0.0.1`), que Lima relaie vers `127.0.0.1:8080` de la machine hôte. Le port 80 n'est pas utilisé : macOS ne permet de l'ouvrir que sur toutes les interfaces, donc visible du réseau. Si la page ne répond plus, vérifier ce service dans la VM : `systemctl status ingress-forward`.
+Minikube tourne dans une VM Lima : le contrôleur d'ingress est exposé sur le port 8080 de la VM par un service systemd (`ingress-forward`, un `kubectl port-forward` limité à `127.0.0.1`), que Lima relaie vers `127.0.0.1:8080` de la machine hôte. Le port 80 n'est pas utilisé : macOS ne permet de l'ouvrir que sur toutes les interfaces, donc visible du réseau. Le https est servi de la même façon sur le port 8443 (service `ingress-forward-tls`). Si la page ne répond plus, vérifier ces services dans la VM : `systemctl status ingress-forward ingress-forward-tls`.
 
-Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:8080:127.0.0.1 http://pwytch.dev:8080/api/health`.
+### Certificat https
+
+Le certificat est émis par [mkcert](https://github.com/FiloSottile/mkcert), dont l'autorité locale est approuvée dans le trousseau du Mac. Il n'est pas dans Git : il est créé à la main, une fois, comme les autres secrets.
+
+```bash
+brew install mkcert
+mkcert -install   # approuve l'autorité locale sur le Mac (mot de passe demandé)
+mkcert -cert-file tls.crt -key-file tls.key pwytch.dev pwytch.prd
+
+# à lancer pour dev et pour prod, depuis la VM (copier tls.crt et tls.key dedans)
+kubectl -n dev create secret tls pwytch-tls --cert=tls.crt --key=tls.key
+kubectl -n prod create secret tls pwytch-tls --cert=tls.crt --key=tls.key
+```
+
+Supprimer ensuite `tls.crt` et `tls.key` du Mac. La clé de l'autorité locale (`mkcert -CAROOT`) permet de signer n'importe quel certificat : ne jamais la partager.
+
+Test sans modifier `/etc/hosts` : `curl --resolve pwytch.dev:8443:127.0.0.1 https://pwytch.dev:8443/api/health`.
 
 ## ArgoCD
 
@@ -236,7 +252,7 @@ Jamais dans Git, y compris chiffrés : créés une fois par namespace avec des v
 ### Autres détails
 
 - `enableServiceLinks: false` : sinon Kubernetes injecte `MQTT_PORT=tcp://...` depuis le Service `mqtt`, ce qui casse la config des applis.
-- Ingress sur le port 8080 : voir [Accéder aux applications](#accéder-aux-applications).
+- Ingress sur les ports 8080 (http) et 8443 (https) : voir [Accéder aux applications](#accéder-aux-applications).
 - Le host de l'Ingress est le même que `FRONTEND_ORIGIN` du ConfigMap (CORS).
 
 ## Règles
