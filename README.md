@@ -1,6 +1,6 @@
 # pwytch-cd
 
-Repo de **déploiement** (CD) de Pwytch. ArgoCD suit ce repo et applique son contenu sur le cluster Kubernetes.
+Repo de **déploiement** (CD) de Pwytch : uniquement les fichiers Kubernetes. Un runner GitHub installé sur la machine de dev les applique sur Minikube.
 
 Le code des services et la CI (tests, build et publication des images) sont dans le repo [Bilnaa/pwytch](https://github.com/Bilnaa/pwytch).
 
@@ -8,23 +8,22 @@ Le code des services et la CI (tests, build et publication des images) sont dans
 
 | | Repo CI : `pwytch` | Repo CD : `pwytch-cd` |
 |---|---|---|
-| Contenu | code des 7 services, Dockerfiles, workflows | chart Helm, values par environnement, applications ArgoCD |
-| Rôle | construire et publier les images sur ghcr.io, taguées avec le sha du commit | décrire ce qui tourne sur le cluster |
-| Qui le lit | les développeurs, GitHub Actions | ArgoCD (repo public, sans identifiants) |
+| Contenu | code des 7 services, Dockerfiles, workflows de build | manifests Kubernetes, workflows de déploiement |
+| Rôle | construire et publier les images sur ghcr.io, taguées avec le sha du commit | décrire ce qui tourne sur le cluster et le déployer |
+| Tourne sur | runners GitHub | runner self-hosted (VM, à côté de Minikube) |
 
-Le lien entre les deux : quand la CI publie des images, elle commit le nouveau tag dans les values de dev de ce repo. ArgoCD voit le commit et déploie. Pour la prod, la promotion d'un tag est manuelle, depuis ce repo.
+Le lien entre les deux : la CI publie des images taguées par sha, le tag est ensuite écrit dans les manifests de ce repo. Le changement de tag déclenche le déploiement.
 
 ## Organisation du repo
 
 ```
-charts/pwytch/        chart Helm (templates des 7 services, postgres, redis, mosquitto)
-envs/dev/values.yaml  values de l'environnement de dev (tags mis à jour par la CI)
-envs/prod/values.yaml values de la prod (tags promus à la main)
-argocd/dev.yaml       Application ArgoCD de dev (sync automatique)
-argocd/prod.yaml      Application ArgoCD de prod (sync manuel)
+k8s/dev/     manifests du namespace dev
+k8s/prod/    manifests du namespace prod
+.github/workflows/deploy-dev.yml    push sur main -> kubectl apply -f k8s/dev (automatique)
+.github/workflows/deploy-prod.yml   lancement manuel -> kubectl apply -f k8s/prod
 ```
 
-Un seul chart, deux fichiers de values : dev et prod ne diffèrent que par leurs values, jamais par leurs templates.
+Dev et prod sont déployés indépendamment, chacun dans son namespace. Les fichiers sont volontairement simples (pas de Helm) : le chart Helm et ArgoCD viennent après, en bonus.
 
 ## Règles
 
