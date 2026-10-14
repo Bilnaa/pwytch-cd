@@ -22,8 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # server-side : un apply classique retire l'annotation de suivi d'ArgoCD, qui voit alors tout dev comme OutOfSync
       - name: Appliquer les manifests de dev
-        run: kubectl apply -f k8s/dev
+        run: kubectl apply --server-side --force-conflicts -f k8s/dev
 
       - name: Attendre la fin du déploiement
         run: |
