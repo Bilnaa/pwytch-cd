@@ -42,8 +42,9 @@ jobs:
             git push
           fi
 
+      # server-side : un apply classique retire l'annotation de suivi d'ArgoCD, qui voit alors tout prod comme OutOfSync
       - name: Appliquer les manifests de prod
-        run: kubectl apply -f k8s/prod
+        run: kubectl apply --server-side --force-conflicts -f k8s/prod
 
       - name: Attendre la fin du déploiement
         run: |
