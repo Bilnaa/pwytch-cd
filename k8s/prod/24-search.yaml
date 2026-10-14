@@ -31,6 +31,27 @@ spec:
                 configMapKeyRef:
                   name: pwytch-config
                   key: MQTT_HOST
+          # démarré : on laisse le temps à l'appli de booter avant de la surveiller
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 30
+          # prêt : sort du Service tant que l'appli ne répond pas
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+          # vivant : redémarre le pod si l'appli ne répond plus
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 20
+            failureThreshold: 3
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { memory: 384Mi }
