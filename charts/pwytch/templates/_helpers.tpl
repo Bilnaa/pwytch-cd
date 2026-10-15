@@ -22,6 +22,10 @@ pour que le Secret de la release Helm soit dans le même namespace que les resso
 {{- if not (has $env (list "dev" "prod")) }}
 {{- fail (printf "environment doit valoir dev ou prod (reçu %q) : utiliser -n dev / -n prod ou --set environment=" $env) }}
 {{- end }}
+{{- /* values-prod.yaml installé avec -n dev (ou l'inverse) : des ressources prod dans le namespace dev */}}
+{{- if and (has .Release.Namespace (list "dev" "prod")) (ne $env .Release.Namespace) }}
+{{- fail (printf "environment %q ne correspond pas au namespace %q : vérifier -n et le fichier de values" $env .Release.Namespace) }}
+{{- end }}
 {{- $env }}
 {{- end }}
 
@@ -35,8 +39,8 @@ pour que le Secret de la release Helm soit dans le même namespace que les resso
 {{- end }}
 
 {{/*
-Labels communs, à mettre sur toutes les ressources (metadata et template des pods).
-Fixes d'un déploiement à l'autre : pas de version, sinon chaque nouveau sha redémarre aussi postgres, redis et mosquitto.
+Labels communs, à mettre sur la metadata de toutes les ressources, jamais sur le template des pods (voir pwytch.selectorLabels).
+Pas de version : elle ne va que sur les 7 services (pwytch.versionLabel).
 commonLabels s'ajoute sans pouvoir remplacer un label du chart, ni le label app des selectors.
 Usage : {{- include "pwytch.labels" . | nindent 4 }}
 */}}
@@ -63,7 +67,8 @@ app.kubernetes.io/version: {{ include "pwytch.imageTag" . | quote }}
 {{/*
 Label de sélection d'un composant (selector des Deployments, StatefulSets et Services).
 Même label app que les manifests de k8s/ : un selector ne peut pas changer, le chart doit pouvoir reprendre les objets existants.
-Sur le template des pods : pwytch.labels + pwytch.selectorLabels (pas de clé en commun).
+C'est aussi le seul label du template des pods, comme dans k8s/ : tout label en plus (release, commonLabels, version du chart)
+changerait le template et redémarrerait postgres, redis et mosquitto (1 replica, donc une coupure), dès la reprise des objets existants.
 Usage : {{- include "pwytch.selectorLabels" (dict "component" "main") | nindent 6 }}
 */}}
 {{- define "pwytch.selectorLabels" -}}

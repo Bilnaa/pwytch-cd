@@ -1,0 +1,86 @@
+# postgres : StatefulSet car il garde des données (volume persistant, identité stable)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+data:
+  init.sql: |
+    -- Runs only on the first start, when the postgres volume is empty
+    -- Nom entre guillemets : un mot réservé (user) reste valide.
+    -- Créée seulement si absente : une base qui existe déjà (postgres, celle de POSTGRES_USER) ne fait pas échouer le script.
+    {{- range .Values.postgres.databases }}
+    SELECT 'CREATE DATABASE "{{ . }}"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ . }}')\gexec
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pwytch.selectorLabels" (dict "component" "postgres") | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pwytch.selectorLabels" (dict "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pwytch.selectorLabels" (dict "component" "postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image | quote }}
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postgres.credentialsSecret }} # créé à la main, jamais dans Git
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage | quote }}

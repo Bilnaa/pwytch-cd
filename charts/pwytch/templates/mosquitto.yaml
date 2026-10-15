@@ -1,0 +1,75 @@
+# mosquitto : Deployment sans volume, le broker ne garde rien d'important (messages en direct)
+{{- define "pwytch.mosquitto.conf" -}}
+listener 1883
+
+allow_anonymous true
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+data:
+  mosquitto.conf: |
+    {{- include "pwytch.mosquitto.conf" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 4 }}
+  ports:
+    - port: 1883
+      targetPort: 1883
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 8 }}
+      annotations:
+        # le broker ne relit pas sa config à chaud : la changer redémarre le pod
+        checksum/config: {{ include "pwytch.mosquitto.conf" . | sha256sum }}
+    spec:
+      containers:
+        - name: mosquitto
+          image: {{ .Values.mosquitto.image | quote }}
+          ports:
+            - containerPort: 1883
+          readinessProbe:
+            tcpSocket:
+              port: 1883
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.mosquitto.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: mosquitto-config
