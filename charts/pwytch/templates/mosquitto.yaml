@@ -8,6 +8,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mosquitto-config
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
 data:
   mosquitto.conf: |
     {{- include "pwytch.mosquitto.conf" . | nindent 4 }}
@@ -16,9 +19,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mqtt
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
 spec:
   selector:
-    app: mosquitto
+    {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 4 }}
   ports:
     - port: 1883
       targetPort: 1883
@@ -27,15 +33,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mosquitto
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mosquitto
+      {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 6 }}
   template:
     metadata:
       labels:
-        app: mosquitto
+        {{- include "pwytch.labels" . | nindent 8 }}
+        {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 8 }}
       annotations:
         # le broker ne relit pas sa config à chaud : la changer redémarre le pod
         checksum/config: {{ include "pwytch.mosquitto.conf" . | sha256sum }}

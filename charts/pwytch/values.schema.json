@@ -1,7 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["environment", "commonLabels", "image"],
+  "required": ["environment", "commonLabels", "image", "postgres", "redis", "mosquitto"],
+  "definitions": {
+    "resources": {
+      "description": "requests et limits d'un conteneur, comme dans un manifest.",
+      "type": "object",
+      "properties": {
+        "requests": { "type": "object" },
+        "limits": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "environment": {
       "description": "dev ou prod. Vide : le namespace de la release.",
@@ -25,6 +36,50 @@
           "pattern": "^([0-9a-f]{40})?$"
         },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "required": ["image", "credentialsSecret", "databases", "storage", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "credentialsSecret": {
+          "description": "Secret créé à la main avec POSTGRES_USER et POSTGRES_PASSWORD.",
+          "type": "string",
+          "minLength": 1
+        },
+        "databases": {
+          "description": "Une base par service. Les noms vont tels quels dans CREATE DATABASE.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+        },
+        "storage": {
+          "description": "Taille du volume, par exemple 1Gi.",
+          "type": "string",
+          "pattern": "^[0-9]+(Mi|Gi|Ti)$"
+        },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "required": ["image", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "mosquitto": {
+      "type": "object",
+      "required": ["image", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
       }
     }
   }

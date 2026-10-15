@@ -3,9 +3,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
 spec:
   selector:
-    app: redis
+    {{- include "pwytch.selectorLabels" (dict "component" "redis") | nindent 4 }}
   ports:
     - port: 6379
       targetPort: 6379
@@ -14,15 +17,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  namespace: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      {{- include "pwytch.selectorLabels" (dict "component" "redis") | nindent 6 }}
   template:
     metadata:
       labels:
-        app: redis
+        {{- include "pwytch.labels" . | nindent 8 }}
+        {{- include "pwytch.selectorLabels" (dict "component" "redis") | nindent 8 }}
     spec:
       containers:
         - name: redis
