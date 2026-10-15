@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["environment", "commonLabels", "image"],
+  "properties": {
+    "environment": {
+      "description": "dev ou prod. Vide : le namespace de la release.",
+      "type": "string",
+      "enum": ["", "dev", "prod"]
+    },
+    "commonLabels": {
+      "description": "Labels en plus, valeurs en texte.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "image": {
+      "type": "object",
+      "required": ["registry", "repositoryPrefix", "tag", "pullPolicy"],
+      "properties": {
+        "registry": { "type": "string", "minLength": 1 },
+        "repositoryPrefix": { "type": "string", "minLength": 1 },
+        "tag": {
+          "description": "sha complet d'un commit du repo CI. Vide seulement tant qu'aucun template ne l'utilise (lint).",
+          "type": "string",
+          "pattern": "^([0-9a-f]{40})?$"
+        },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    }
+  }
+}

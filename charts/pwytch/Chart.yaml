@@ -4,5 +4,4 @@ description: Pwytch (main et les 6 services, postgres, redis, mosquitto) sur Kub
 type: application
 # version du chart, à monter quand les templates changent
 version: 0.1.0
-# version de l'appli : les images sont taguées par sha, voir image.tag dans values.yaml
-appVersion: "e68b75b6e41ac90669c4661cb3c65f7ff65cce1f"
+# pas d'appVersion : la version de l'appli est le sha des images, un seul point de vérité dans values.yaml (image.tag)
