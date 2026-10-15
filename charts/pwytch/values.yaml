@@ -1,0 +1,20 @@
+# Valeurs de base du chart. Les fichiers par environnement (dev, prod) ne surchargent que ce qui change.
+# Le namespace de déploiement est celui de la release : helm install pwytch charts/pwytch -n <namespace>.
+# Le chart ne crée pas le Namespace : il existe déjà, ou on passe --create-namespace.
+# Les types et formats sont vérifiés par values.schema.json (lint, template, install).
+
+# dev ou prod : label environment de toutes les ressources. Vide : le namespace de la release (-n dev / -n prod).
+environment: ""
+
+# Labels ajoutés en plus sur toutes les ressources (valeurs en texte : --set-string).
+# Ne remplacent pas les labels du chart : une clé déjà utilisée par le chart est ignorée.
+commonLabels: {}
+
+# Images des 7 services : <registry>/<repositoryPrefix><service>:<tag>
+image:
+  registry: ghcr.io
+  repositoryPrefix: bilnaa/pwytch-
+  # sha complet (40 caractères) d'un commit du repo CI, jamais latest. Pas de valeur par défaut :
+  # chaque environnement donne le sien (--set image.tag=<sha> ou fichier de values par environnement).
+  tag: ""
+  pullPolicy: IfNotPresent
