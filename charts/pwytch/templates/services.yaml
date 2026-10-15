@@ -1,0 +1,95 @@
+{{- /* Un Deployment et un Service par entrée de services (main, stream, live-chat, replay, search, bookmarks, stats) */}}
+{{- range $name, $service := .Values.services }}
+{{- $config := dict }}
+{{- range $key := $service.config | default list }}
+{{- if not (hasKey $.Values.config.data $key) }}
+{{- fail (printf "services.%s.config : la clé %q n'existe pas dans config.data" $name $key) }}
+{{- end }}
+{{- $_ := set $config $key (get $.Values.config.data $key) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+spec:
+  selector:
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+    app.kubernetes.io/version: {{ include "pwytch.serviceImageTag" (dict "root" $ "service" $service) | quote }}
+spec:
+  replicas: {{ $service.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 8 }}
+      {{- if $config }}
+      annotations:
+        # change quand une des valeurs lues par ce service change dans le ConfigMap : le pod redémarre et relit sa config
+        checksum/config: {{ toJson $config | sha256sum }}
+      {{- end }}
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      {{- if $service.databaseUrlKey }}
+      # attend que postgres réponde : sans ça, l'appli démarre avant le DNS ou la base et plante au premier essai
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ $.Values.waitForPostgres.image | quote }}
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done"]
+          resources:
+            {{- toYaml $.Values.waitForPostgres.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "pwytch.serviceImage" (dict "root" $ "name" $name "service" $service) | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $service.port }}
+          {{- if or $config $service.databaseUrlKey $service.jwt }}
+          env:
+            {{- with $service.databaseUrlKey }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.databaseUrls }}
+                  key: {{ . }}
+            {{- end }}
+            {{- if $service.jwt }}
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.jwt }}
+                  key: secret
+            {{- end }}
+            {{- range $key := $service.config }}
+            - name: {{ $key }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Values.config.name }}
+                  key: {{ $key }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+{{- end }}
