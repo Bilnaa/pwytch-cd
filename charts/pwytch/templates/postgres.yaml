@@ -9,8 +9,10 @@ metadata:
 data:
   init.sql: |
     -- Runs only on the first start, when the postgres volume is empty
+    -- Nom entre guillemets : un mot réservé (user) reste valide.
+    -- Créée seulement si absente : une base qui existe déjà (postgres, celle de POSTGRES_USER) ne fait pas échouer le script.
     {{- range .Values.postgres.databases }}
-    CREATE DATABASE {{ . }};
+    SELECT 'CREATE DATABASE "{{ . }}"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ . }}')\gexec
     {{- end }}
 ---
 apiVersion: v1
@@ -43,7 +45,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "pwytch.labels" . | nindent 8 }}
+        {{- include "pwytch.podLabels" . | nindent 8 }}
         {{- include "pwytch.selectorLabels" (dict "component" "postgres") | nindent 8 }}
     spec:
       containers:
