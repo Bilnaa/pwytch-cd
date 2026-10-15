@@ -65,7 +65,14 @@ k8s/dev/, k8s/prod/   manifests numérotés (00 namespace, 1x infra, 2x services
 charts/pwytch/                      chart Helm de Pwytch (en cours, remplacera k8s/dev et k8s/prod)
 ```
 
-Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les reprend petit à petit : pour l'instant il ne pose que la base (values, labels communs, namespace de la release). Le namespace se choisit avec `-n` ; le chart ne le crée pas (il existe déjà, sinon `--create-namespace`).
+Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les reprend petit à petit : pour l'instant il pose la base (values, labels communs, namespace de la release), le ConfigMap `pwytch-config` et un Deployment + un Service pour chacun des 7 services (template `services.yaml`, une entrée par service dans `services:` de `values.yaml` : replicas, port, ressources, image).
+
+- Configuration non secrète : `config.data` dans les values. Chaque service ne reçoit que les clés listées dans son `config`. Changer une valeur change l'annotation `checksum/config` des services qui la lisent : leurs pods redémarrent avec la nouvelle valeur, sans rebuild d'image.
+- Secrets : le chart ne contient aucune valeur secrète, il référence par leur nom les Secrets créés à la main (`secrets.databaseUrls`, `secrets.jwt`, voir [Secrets](#secrets-détail-de-létape-2)). Chaque service ne reçoit que les siens : `DATABASE_URL` depuis sa clé (`databaseUrlKey`), `JWT_SECRET_KEY` pour `main` seulement.
+- Image : `<registry>/<repositoryPrefix><service>:<image.tag>`, toujours un sha complet. Un service peut avoir son propre `image.tag` (ou `image.repository`). Le namespace se choisit avec `-n` ; le chart ne le crée pas (il existe déjà, sinon `--create-namespace`).
+- Probes : startup, readiness et liveness sur la route `probePath` de chaque service (`/api` pour main, `/health` pour les autres). Délais et seuils dans `probes` des values.
+- Volumes : `volumes` crée un PVC par entrée (`stream-lives`, `replay-files`, taille dans les values). stream écrit les lives, replay les lit en lecture seule et écrit ses replays. Chaque volume est monté au chemin de la clé du ConfigMap que lit l'appli (`LIVES_DIR`, `REPLAYS_DIR`). Les PVC sont gardés par `helm uninstall`.
+- Autoscaling de main : `services.main.autoscaling.enabled=true` ajoute un HPA sur le CPU (min, max, seuil dans les values) et retire `replicas` du Deployment. Il faut metrics-server (`minikube addons enable metrics-server`).
 
 Le label `environment` vient du namespace (`-n dev` ou `-n prod`). `image.tag` (sha complet du repo CI) n'a pas de valeur par défaut : chaque environnement donne le sien. `values.schema.json` vérifie les values (dev/prod, sha de 40 caractères).
 

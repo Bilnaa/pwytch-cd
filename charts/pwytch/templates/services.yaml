@@ -1,0 +1,174 @@
+{{- /* Un Deployment et un Service par entrée de services (main, stream, live-chat, replay, search, bookmarks, stats) */}}
+{{- range $name, $service := .Values.services }}
+{{- $config := dict }}
+{{- range $key := $service.config | default list }}
+{{- if not (hasKey $.Values.config.data $key) }}
+{{- fail (printf "services.%s.config : la clé %q n'existe pas dans config.data" $name $key) }}
+{{- end }}
+{{- $_ := set $config $key (get $.Values.config.data $key) }}
+{{- end }}
+{{- range $mount := $service.volumes | default list }}
+{{- if not (hasKey $.Values.volumes $mount.name) }}
+{{- fail (printf "services.%s.volumes : le volume %q n'existe pas dans volumes" $name $mount.name) }}
+{{- end }}
+{{- if not (hasKey $config $mount.configKey) }}
+{{- fail (printf "services.%s.volumes : la clé %q doit être dans services.%s.config (chemin lu par l'appli)" $name $mount.configKey $name) }}
+{{- end }}
+{{- end }}
+{{- $autoscaling := $service.autoscaling | default dict }}
+{{- if and $autoscaling.enabled (gt (int $autoscaling.minReplicas) (int $autoscaling.maxReplicas)) }}
+{{- fail (printf "services.%s.autoscaling : minReplicas (%v) dépasse maxReplicas (%v)" $name $autoscaling.minReplicas $autoscaling.maxReplicas) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+spec:
+  selector:
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+    app.kubernetes.io/version: {{ include "pwytch.serviceImageTag" (dict "root" $ "service" $service) | quote }}
+spec:
+  {{- if not $autoscaling.enabled }}
+  # avec l'autoscaling, le nombre de pods est géré par le HPA : un replicas ici l'écraserait à chaque upgrade
+  replicas: {{ $service.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 8 }}
+      {{- if $config }}
+      annotations:
+        # change quand une des valeurs lues par ce service change dans le ConfigMap : le pod redémarre et relit sa config
+        checksum/config: {{ toJson $config | sha256sum }}
+      {{- end }}
+    spec:
+      # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
+      enableServiceLinks: false
+      {{- if $service.databaseUrlKey }}
+      # attend que postgres réponde : sans ça, l'appli démarre avant le DNS ou la base et plante au premier essai
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ $.Values.waitForPostgres.image | quote }}
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done"]
+          resources:
+            {{- toYaml $.Values.waitForPostgres.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "pwytch.serviceImage" (dict "root" $ "name" $name "service" $service) | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $service.port }}
+          {{- if or $config $service.databaseUrlKey $service.jwt }}
+          env:
+            {{- with $service.databaseUrlKey }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.databaseUrls }}
+                  key: {{ . }}
+            {{- end }}
+            {{- if $service.jwt }}
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secrets.jwt }}
+                  key: secret
+            {{- end }}
+            {{- range $key := $service.config }}
+            - name: {{ $key }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Values.config.name }}
+                  key: {{ $key }}
+            {{- end }}
+          {{- end }}
+          {{- with $service.probePath }}
+          # démarré : on laisse le temps à l'appli de booter avant de la surveiller
+          startupProbe:
+            httpGet:
+              path: {{ . }}
+              port: http
+            {{- toYaml $.Values.probes.startup | nindent 12 }}
+          # prêt : sort du Service tant que l'appli ne répond pas
+          readinessProbe:
+            httpGet:
+              path: {{ . }}
+              port: http
+            {{- toYaml $.Values.probes.readiness | nindent 12 }}
+          # vivant : redémarre le pod si l'appli ne répond plus
+          livenessProbe:
+            httpGet:
+              path: {{ . }}
+              port: http
+            {{- toYaml $.Values.probes.liveness | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+          {{- with $service.volumes }}
+          volumeMounts:
+            {{- range . }}
+            - name: {{ .name }}
+              mountPath: {{ get $config .configKey }}
+              {{- if .readOnly }}
+              readOnly: true
+              {{- end }}
+            {{- end }}
+          {{- end }}
+      {{- with $service.volumes }}
+      volumes:
+        {{- range . }}
+        - name: {{ .name }}
+          persistentVolumeClaim:
+            claimName: {{ (get $.Values.volumes .name).claimName }}
+        {{- end }}
+      {{- end }}
+{{- if $autoscaling.enabled }}
+---
+# HPA sur le CPU : la cible est un pourcentage des requests cpu du conteneur. Il faut metrics-server.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+    {{- include "pwytch.selectorLabels" (dict "component" $name) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $autoscaling.minReplicas }}
+  maxReplicas: {{ $autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

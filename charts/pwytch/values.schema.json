@@ -1,8 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["environment", "commonLabels", "image", "postgres", "redis", "mosquitto"],
+  "required": ["environment", "commonLabels", "image", "postgres", "redis", "mosquitto", "config", "secrets", "waitForPostgres", "probes", "volumes", "services"],
   "definitions": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "envName": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
     "quantity": {
       "description": "Quantité Kubernetes non nulle : 512Mi, 1Gi, 1.5Gi, 1G, 500M, 1e9, 536870912…",
       "oneOf": [
@@ -33,6 +35,18 @@
         "limits": { "$ref": "#/definitions/resourceList" }
       },
       "additionalProperties": false
+    },
+    "probe": {
+      "description": "Délais et seuils d'une probe, comme dans un manifest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 }
+      }
     }
   },
   "properties": {
@@ -53,7 +67,7 @@
         "registry": { "type": "string", "minLength": 1 },
         "repositoryPrefix": { "type": "string", "minLength": 1 },
         "tag": {
-          "description": "sha complet d'un commit du repo CI. Vide seulement tant qu'aucun template ne l'utilise (lint).",
+          "description": "sha complet d'un commit du repo CI. Vide dans values.yaml : obligatoire pour template et install (--set image.tag=<sha>).",
           "type": "string",
           "pattern": "^([0-9a-f]{40})?$"
         },
@@ -94,6 +108,39 @@
         "resources": { "$ref": "#/definitions/resources" }
       }
     },
+    "config": {
+      "type": "object",
+      "required": ["name", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Nom du ConfigMap.", "type": "string", "minLength": 1 },
+        "data": {
+          "description": "Variables non secrètes, valeurs en texte. Aucun secret ici.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/definitions/envName" },
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "secrets": {
+      "description": "Noms des Secrets créés à la main dans le namespace, jamais leurs valeurs.",
+      "type": "object",
+      "required": ["databaseUrls", "jwt"],
+      "additionalProperties": false,
+      "properties": {
+        "databaseUrls": { "type": "string", "minLength": 1 },
+        "jwt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "waitForPostgres": {
+      "type": "object",
+      "required": ["image", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
     "mosquitto": {
       "type": "object",
       "required": ["image", "resources"],
@@ -101,6 +148,91 @@
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "probes": {
+      "type": "object",
+      "required": ["startup", "readiness", "liveness"],
+      "additionalProperties": false,
+      "properties": {
+        "startup": { "$ref": "#/definitions/probe" },
+        "readiness": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" }
+      }
+    },
+    "volumes": {
+      "description": "Volumes persistants, un PVC chacun.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["claimName", "size", "accessMode"],
+        "additionalProperties": false,
+        "properties": {
+          "claimName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
+          "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$" },
+          "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany"] }
+        }
+      }
+    },
+    "services": {
+      "description": "Les 7 services, un Deployment et un Service chacun, nommés comme la clé.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["replicas", "port", "probePath", "resources"],
+        "additionalProperties": false,
+        "properties": {
+          "replicas": { "type": "integer", "minimum": 0 },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "image": {
+            "description": "Remplace l'image du chart pour ce service seulement.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "repository": { "type": "string", "minLength": 1 },
+              "tag": { "$ref": "#/definitions/sha" }
+            }
+          },
+          "config": {
+            "description": "Clés de config.data passées en variables d'environnement.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/definitions/envName" }
+          },
+          "databaseUrlKey": { "description": "Clé du Secret secrets.databaseUrls passée en DATABASE_URL.", "type": "string", "minLength": 1 },
+          "jwt": { "description": "Passe la clé secret du Secret secrets.jwt en JWT_SECRET_KEY.", "type": "boolean" },
+          "probePath": { "description": "Route HTTP des probes startup, readiness et liveness.", "type": "string", "pattern": "^/" },
+          "volumes": {
+            "description": "Volumes de volumes montés au chemin de la clé configKey du ConfigMap.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "configKey"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "configKey": { "$ref": "#/definitions/envName" },
+                "readOnly": { "type": "boolean" }
+              }
+            }
+          },
+          "autoscaling": {
+            "description": "HPA sur le CPU. Activé : replicas n'est plus mis sur le Deployment.",
+            "type": "object",
+            "required": ["enabled"],
+            "additionalProperties": false,
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "minReplicas": { "type": "integer", "minimum": 1 },
+              "maxReplicas": { "type": "integer", "minimum": 1 },
+              "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+            },
+            "if": { "properties": { "enabled": { "const": true } } },
+            "then": { "required": ["minReplicas", "maxReplicas", "targetCPUUtilizationPercentage"] }
+          },
+          "resources": { "$ref": "#/definitions/resources" }
+        }
       }
     }
   }
