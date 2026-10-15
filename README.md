@@ -62,9 +62,16 @@ Chaque service a trois probes HTTP (startup, readiness, liveness), voir [Vérifi
 k8s/dev/, k8s/prod/   manifests numérotés (00 namespace, 1x infra, 2x services, 30 ingress)
 .github/workflows/deploy-dev.yml    push sur main touchant k8s/dev -> kubectl apply (automatique)
 .github/workflows/deploy-prod.yml   lancement manuel, input optionnel `tag` (promotion)
+helm/pwytch/                        chart Helm de Pwytch (en cours, remplacera k8s/dev et k8s/prod)
 ```
 
-Les manifests sont en YAML simple (pas de Helm). Un chart Helm est une évolution possible.
+Les manifests de `k8s/` sont en YAML simple. Le chart `helm/pwytch` les reprend petit à petit : pour l'instant il ne pose que la base (values, labels communs, namespace configurable).
+
+```bash
+helm lint helm/pwytch
+helm template pwytch helm/pwytch -n dev                     # namespace de la release
+helm template pwytch helm/pwytch --set namespace=prod --set createNamespace=true
+```
 
 ## Prérequis et cluster
 

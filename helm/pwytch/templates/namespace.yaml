@@ -1,0 +1,8 @@
+{{- if .Values.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "pwytch.namespace" . }}
+  labels:
+    {{- include "pwytch.labels" . | nindent 4 }}
+{{- end }}
