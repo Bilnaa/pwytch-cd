@@ -54,42 +54,12 @@ waitForPostgres:
     requests: { cpu: 10m, memory: 16Mi }
     limits: { memory: 64Mi }
 
-# --- Probes des 7 services, sur la route de services.<nom>.probePath ---
-# startup : laisse le temps à l'appli de booter avant les deux autres (periodSeconds x failureThreshold = 150 s max).
-# readiness : le pod sort du Service tant que l'appli ne répond pas.
-# liveness : le pod redémarre si l'appli ne répond plus.
-# Champs acceptés : initialDelaySeconds, periodSeconds, timeoutSeconds, failureThreshold, successThreshold.
-probes:
-  startup: { periodSeconds: 5, failureThreshold: 30 }
-  readiness: { periodSeconds: 10, failureThreshold: 3 }
-  liveness: { periodSeconds: 20, failureThreshold: 3 }
-
-# --- Volumes persistants (un PVC chacun), montés par services.<nom>.volumes ---
-# lives : segments HLS écrits par stream, relus par replay. replays : fichiers fabriqués par replay.
-# ReadWriteOnce suffit sur un seul node (minikube) ; sur plusieurs nodes, stream et replay doivent tourner
-# sur le même node, ou il faut un stockage ReadWriteMany.
-# Les PVC sont gardés par helm uninstall (helm.sh/resource-policy: keep) : les fichiers ne partent pas avec la release.
-volumes:
-  lives:
-    claimName: stream-lives
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  replays:
-    claimName: replay-files
-    size: 1Gi
-    accessMode: ReadWriteOnce
-
 # --- Les 7 services : un Deployment et un Service chacun, nommés comme la clé ---
 # image : <image.registry>/<image.repositoryPrefix><nom>:<image.tag>. image.repository et image.tag
 # d'un service remplacent ceux du chart pour ce service seulement (tag : sha complet, jamais latest).
 # config : clés du ConfigMap passées en variables d'environnement.
 # databaseUrlKey : clé du Secret databaseUrls passée en DATABASE_URL. Absente : pas de base, pas d'attente de postgres.
 # jwt : passe la clé du Secret jwt en JWT_SECRET_KEY.
-# probePath : route HTTP des probes (startup, readiness, liveness), qui répond 200 quand l'appli tourne.
-# volumes : volumes (clés de volumes: plus haut) montés au chemin de la clé configKey du ConfigMap,
-#   le même que celui que lit l'appli. readOnly : montage en lecture seule.
-# autoscaling : HPA sur le CPU (pourcentage des requests). Activé, replicas n'est plus mis sur le Deployment,
-#   le HPA gère le nombre de pods entre minReplicas et maxReplicas. Il faut metrics-server dans le cluster.
 services:
   main:
     replicas: 1
@@ -97,12 +67,6 @@ services:
     config: [STREAM_URL, LIVE_CHAT_URL, REPLAY_URL, SEARCH_URL, STATS_URL, BOOKMARKS_URL, FRONTEND_ORIGIN, MQTT_HOST]
     databaseUrlKey: main
     jwt: true
-    probePath: /api
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 5
-      targetCPUUtilizationPercentage: 70
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -110,9 +74,6 @@ services:
     replicas: 1
     port: 8000
     config: [LIVES_DIR, MQTT_HOST]
-    probePath: /health
-    volumes:
-      - { name: lives, configKey: LIVES_DIR }
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -121,7 +82,6 @@ services:
     port: 8000
     config: [REDIS_URL, MQTT_HOST]
     databaseUrlKey: live_chat
-    probePath: /health
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -130,10 +90,6 @@ services:
     port: 8000
     config: [MQTT_HOST, LIVES_DIR, REPLAYS_DIR]
     databaseUrlKey: replay
-    probePath: /health
-    volumes:
-      - { name: lives, configKey: LIVES_DIR, readOnly: true }
-      - { name: replays, configKey: REPLAYS_DIR }
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -142,7 +98,6 @@ services:
     port: 8000
     config: [MQTT_HOST]
     databaseUrlKey: search
-    probePath: /health
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -151,7 +106,6 @@ services:
     port: 8000
     config: [REDIS_URL, MQTT_HOST]
     databaseUrlKey: bookmarks
-    probePath: /health
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
@@ -160,7 +114,6 @@ services:
     port: 8000
     config: [REDIS_URL, MQTT_HOST]
     databaseUrlKey: stats
-    probePath: /health
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
