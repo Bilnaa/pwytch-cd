@@ -1,0 +1,22 @@
+# Valeurs de base du chart. Les fichiers par environnement (dev, prod) ne surchargent que ce qui change.
+
+# dev ou prod : ajouté aux labels de toutes les ressources
+environment: dev
+#environment: prod  # si vous déployez en production
+
+# Namespace de déploiement. Vide : celui de la release (helm install -n <namespace>).
+namespace: ""
+
+# Créer le Namespace avec le chart. false si le namespace existe déjà ou si on passe --create-namespace.
+createNamespace: false
+
+# Labels ajoutés en plus sur toutes les ressources
+commonLabels: {}
+
+# Images des 7 services : <registry>/<repositoryPrefix><service>:<tag>
+image:
+  registry: ghcr.io
+  repositoryPrefix: bilnaa/pwytch-
+  # sha complet d'un commit du repo CI, jamais latest. Vide : appVersion du Chart.yaml.
+  tag: ""
+  pullPolicy: IfNotPresent
