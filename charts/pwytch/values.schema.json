@@ -1,7 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["environment", "commonLabels", "image"],
+  "required": ["environment", "commonLabels", "image", "config", "secrets", "waitForPostgres", "services"],
+  "definitions": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "envName": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
+    "resources": {
+      "description": "requests et limits d'un conteneur, comme dans un manifest.",
+      "type": "object",
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
+        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
+      },
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "environment": {
       "description": "dev ou prod. Vide : le namespace de la release.",
@@ -20,11 +33,76 @@
         "registry": { "type": "string", "minLength": 1 },
         "repositoryPrefix": { "type": "string", "minLength": 1 },
         "tag": {
-          "description": "sha complet d'un commit du repo CI. Vide seulement tant qu'aucun template ne l'utilise (lint).",
+          "description": "sha complet d'un commit du repo CI. Vide dans values.yaml : obligatoire pour template et install (--set image.tag=<sha>).",
           "type": "string",
           "pattern": "^([0-9a-f]{40})?$"
         },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["name", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Nom du ConfigMap.", "type": "string", "minLength": 1 },
+        "data": {
+          "description": "Variables non secrètes, valeurs en texte. Aucun secret ici.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/definitions/envName" },
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "secrets": {
+      "description": "Noms des Secrets créés à la main dans le namespace, jamais leurs valeurs.",
+      "type": "object",
+      "required": ["databaseUrls", "jwt"],
+      "additionalProperties": false,
+      "properties": {
+        "databaseUrls": { "type": "string", "minLength": 1 },
+        "jwt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "waitForPostgres": {
+      "type": "object",
+      "required": ["image", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "services": {
+      "description": "Les 7 services, un Deployment et un Service chacun, nommés comme la clé.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["replicas", "port", "resources"],
+        "additionalProperties": false,
+        "properties": {
+          "replicas": { "type": "integer", "minimum": 0 },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "image": {
+            "description": "Remplace l'image du chart pour ce service seulement.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "repository": { "type": "string", "minLength": 1 },
+              "tag": { "$ref": "#/definitions/sha" }
+            }
+          },
+          "config": {
+            "description": "Clés de config.data passées en variables d'environnement.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/definitions/envName" }
+          },
+          "databaseUrlKey": { "description": "Clé du Secret secrets.databaseUrls passée en DATABASE_URL.", "type": "string", "minLength": 1 },
+          "jwt": { "description": "Passe la clé secret du Secret secrets.jwt en JWT_SECRET_KEY.", "type": "boolean" },
+          "resources": { "$ref": "#/definitions/resources" }
+        }
       }
     }
   }

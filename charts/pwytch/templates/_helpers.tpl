@@ -69,3 +69,27 @@ Usage : {{- include "pwytch.selectorLabels" (dict "component" "main") | nindent 
 {{- define "pwytch.selectorLabels" -}}
 app: {{ required "selectorLabels : component est obligatoire" .component | quote }}
 {{- end }}
+
+{{/*
+Image d'un des 7 services : <registry>/<repositoryPrefix><nom>:<tag>.
+services.<nom>.image.repository et services.<nom>.image.tag remplacent ceux du chart pour ce service.
+Le tag est toujours un sha complet de 40 caractères, jamais latest.
+Usage : {{ include "pwytch.serviceImage" (dict "root" $ "name" $name "service" $service) }}
+*/}}
+{{- define "pwytch.serviceImage" -}}
+{{- $image := .service.image | default dict }}
+{{- $repository := $image.repository | default (printf "%s/%s%s" .root.Values.image.registry .root.Values.image.repositoryPrefix .name) }}
+{{- $tag := $image.tag | default (include "pwytch.imageTag" .root) }}
+{{- if not (regexMatch "^[0-9a-f]{40}$" $tag) }}
+{{- fail (printf "services.%s.image.tag doit être un sha complet de 40 caractères (reçu %q)" .name $tag) }}
+{{- end }}
+{{- printf "%s:%s" $repository $tag }}
+{{- end }}
+
+{{/*
+Tag effectif d'un service, pour son label de version.
+Usage : {{ include "pwytch.serviceImageTag" (dict "root" $ "service" $service) }}
+*/}}
+{{- define "pwytch.serviceImageTag" -}}
+{{- ((.service.image | default dict).tag) | default (include "pwytch.imageTag" .root) }}
+{{- end }}

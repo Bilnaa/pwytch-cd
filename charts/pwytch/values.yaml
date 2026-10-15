@@ -18,3 +18,102 @@ image:
   # chaque environnement donne le sien (--set image.tag=<sha> ou fichier de values par environnement).
   tag: ""
   pullPolicy: IfNotPresent
+
+# --- Configuration non secrète : ConfigMap pwytch-config ---
+# Chaque service ne reçoit que les clés listées dans services.<nom>.config.
+# Modifier une valeur redémarre seulement les services qui la lisent (annotation checksum/config sur leurs pods).
+config:
+  name: pwytch-config
+  data:
+    STREAM_URL: http://stream:8000
+    LIVE_CHAT_URL: http://live-chat:8000
+    REPLAY_URL: http://replay:8000
+    SEARCH_URL: http://search:8000
+    STATS_URL: http://stats:8000
+    BOOKMARKS_URL: http://bookmarks:8000
+    # origine du front autorisée par main (CORS) : pwytch.test en dev, pwytch.prd en prod
+    FRONTEND_ORIGIN: http://pwytch.test
+    MQTT_HOST: mqtt
+    REDIS_URL: redis://redis:6379/0
+    LIVES_DIR: /data/lives
+    REPLAYS_DIR: /data/replays
+
+# --- Secrets ---
+# Créés à la main, une fois par namespace (voir le README), jamais dans Git ni dans les values.
+# Le chart ne fait que les référencer par leur nom.
+secrets:
+  # une clé par service avec base : main, live_chat, replay, search, bookmarks, stats
+  databaseUrls: database-urls
+  # clé secret
+  jwt: jwt
+
+# Attente de postgres avant le démarrage des services qui ont une base
+waitForPostgres:
+  image: postgres:18.0-alpine
+  resources:
+    requests: { cpu: 10m, memory: 16Mi }
+    limits: { memory: 64Mi }
+
+# --- Les 7 services : un Deployment et un Service chacun, nommés comme la clé ---
+# image : <image.registry>/<image.repositoryPrefix><nom>:<image.tag>. image.repository et image.tag
+# d'un service remplacent ceux du chart pour ce service seulement (tag : sha complet, jamais latest).
+# config : clés du ConfigMap passées en variables d'environnement.
+# databaseUrlKey : clé du Secret databaseUrls passée en DATABASE_URL. Absente : pas de base, pas d'attente de postgres.
+# jwt : passe la clé du Secret jwt en JWT_SECRET_KEY.
+services:
+  main:
+    replicas: 1
+    port: 8000
+    config: [STREAM_URL, LIVE_CHAT_URL, REPLAY_URL, SEARCH_URL, STATS_URL, BOOKMARKS_URL, FRONTEND_ORIGIN, MQTT_HOST]
+    databaseUrlKey: main
+    jwt: true
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  stream:
+    replicas: 1
+    port: 8000
+    config: [LIVES_DIR, MQTT_HOST]
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  live-chat:
+    replicas: 1
+    port: 8000
+    config: [REDIS_URL, MQTT_HOST]
+    databaseUrlKey: live_chat
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  replay:
+    replicas: 1
+    port: 8000
+    config: [MQTT_HOST, LIVES_DIR, REPLAYS_DIR]
+    databaseUrlKey: replay
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  search:
+    replicas: 1
+    port: 8000
+    config: [MQTT_HOST]
+    databaseUrlKey: search
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  bookmarks:
+    replicas: 1
+    port: 8000
+    config: [REDIS_URL, MQTT_HOST]
+    databaseUrlKey: bookmarks
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  stats:
+    replicas: 1
+    port: 8000
+    config: [REDIS_URL, MQTT_HOST]
+    databaseUrlKey: stats
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
