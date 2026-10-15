@@ -1,0 +1,7 @@
+apiVersion: v2
+name: pwytch
+description: Pwytch (main et les 6 services, postgres, redis, mosquitto) sur Kubernetes
+type: application
+# version du chart, à monter quand les templates changent
+version: 0.1.0
+# pas d'appVersion : la version de l'appli est le sha des images, un seul point de vérité dans values.yaml (image.tag)
