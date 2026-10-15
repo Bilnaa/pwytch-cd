@@ -1,0 +1,32 @@
+# --- Infra stateful : postgres, redis, mosquitto ---
+# Les noms des Services (postgres, redis, mqtt) sont fixes : les services les utilisent dans leurs URLs.
+
+postgres:
+  image: postgres:18.0-alpine
+  # Secret créé à la main (POSTGRES_USER, POSTGRES_PASSWORD), jamais dans Git
+  credentialsSecret: postgres-credentials
+  # Une base par service, créées au premier démarrage seulement (volume vide).
+  # En ajouter une ici ne la crée pas sur un volume existant.
+  databases:
+    - main
+    - live_chat
+    - replay
+    - search
+    - bookmarks
+    - stats
+  storage: 1Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+redis:
+  image: redis:8.10.2
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+mosquitto:
+  image: eclipse-mosquitto:2.1.2-alpine
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits: { memory: 64Mi }
