@@ -62,10 +62,12 @@ Chaque service a trois probes HTTP (startup, readiness, liveness), voir [Vérifi
 k8s/dev/, k8s/prod/   manifests numérotés (00 namespace, 1x infra, 2x services, 30 ingress)
 .github/workflows/deploy-dev.yml    push sur main touchant k8s/dev -> kubectl apply (automatique)
 .github/workflows/deploy-prod.yml   lancement manuel, input optionnel `tag` (promotion)
-charts/pwytch/                      chart Helm de Pwytch (en cours, remplacera k8s/dev et k8s/prod)
+charts/pwytch/                      chart Helm de Pwytch (remplacera k8s/dev et k8s/prod), values-dev.yaml et values-prod.yaml
 ```
 
-Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les reprend petit à petit : pour l'instant il pose la base (values, labels communs, namespace de la release), le ConfigMap `pwytch-config` et un Deployment + un Service pour chacun des 7 services (template `services.yaml`, une entrée par service dans `services:` de `values.yaml` : replicas, port, ressources, image).
+Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les reprend petit à petit : il contient la base (values, labels communs, namespace de la release), l'infra stateful (postgres, redis, mosquitto), le ConfigMap `pwytch-config` et un Deployment + un Service pour chacun des 7 services (template `services.yaml`, une entrée par service dans `services:` de `values.yaml` : replicas, port, ressources, image).
+
+- Infra stateful : postgres (StatefulSet, volume de `postgres.storage`, une base par service créée au premier démarrage, identifiants depuis le Secret `postgres-credentials`), redis et mosquitto (Deployment + Service, configuration de mosquitto dans un ConfigMap). Les Services gardent les noms `postgres`, `redis` et `mqtt` utilisés dans les URLs.
 
 - Configuration non secrète : `config.data` dans les values. Chaque service ne reçoit que les clés listées dans son `config`. Changer une valeur change l'annotation `checksum/config` des services qui la lisent : leurs pods redémarrent avec la nouvelle valeur, sans rebuild d'image.
 - Secrets : le chart ne contient aucune valeur secrète, il référence par leur nom les Secrets créés à la main (`secrets.databaseUrls`, `secrets.jwt`, voir [Secrets](#secrets-détail-de-létape-2)). Chaque service ne reçoit que les siens : `DATABASE_URL` depuis sa clé (`databaseUrlKey`), `JWT_SECRET_KEY` pour `main` seulement.
@@ -76,10 +78,12 @@ Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les repren
 
 Le label `environment` vient du namespace (`-n dev` ou `-n prod`). `image.tag` (sha complet du repo CI) n'a pas de valeur par défaut : chaque environnement donne le sien. `values.schema.json` vérifie les values (dev/prod, sha de 40 caractères).
 
+Un fichier de values par environnement, `values-dev.yaml` et `values-prod.yaml`, ne surcharge que ce qui change : `environment`, `image.tag` et `FRONTEND_ORIGIN`. Ce sont des copies de `k8s/dev` et `k8s/prod` : jusqu'à la bascule sur le chart, un changement se fait aux deux endroits. Installer un fichier dans le mauvais namespace (`-n dev -f values-prod.yaml`) échoue.
+
 ```bash
-helm lint charts/pwytch
-helm template pwytch charts/pwytch -n dev --set image.tag=<sha>
-helm template pwytch charts/pwytch -n prod --set image.tag=<sha>
+helm lint charts/pwytch -n dev -f charts/pwytch/values-dev.yaml
+helm template pwytch charts/pwytch -n dev -f charts/pwytch/values-dev.yaml
+helm template pwytch charts/pwytch -n prod -f charts/pwytch/values-prod.yaml
 ```
 
 ## Prérequis et cluster

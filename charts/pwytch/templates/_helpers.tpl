@@ -22,6 +22,10 @@ pour que le Secret de la release Helm soit dans le même namespace que les resso
 {{- if not (has $env (list "dev" "prod")) }}
 {{- fail (printf "environment doit valoir dev ou prod (reçu %q) : utiliser -n dev / -n prod ou --set environment=" $env) }}
 {{- end }}
+{{- /* values-prod.yaml installé avec -n dev (ou l'inverse) : des ressources prod dans le namespace dev */}}
+{{- if and (has .Release.Namespace (list "dev" "prod")) (ne $env .Release.Namespace) }}
+{{- fail (printf "environment %q ne correspond pas au namespace %q : vérifier -n et le fichier de values" $env .Release.Namespace) }}
+{{- end }}
 {{- $env }}
 {{- end }}
 
