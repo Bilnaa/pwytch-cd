@@ -44,7 +44,6 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "pwytch.podLabels" . | nindent 8 }}
         {{- include "pwytch.selectorLabels" (dict "component" "mosquitto") | nindent 8 }}
       annotations:
         # le broker ne relit pas sa config à chaud : la changer redémarre le pod
@@ -52,7 +51,7 @@ spec:
     spec:
       containers:
         - name: mosquitto
-          image: {{ .Values.mosquitto.image }}
+          image: {{ .Values.mosquitto.image | quote }}
           ports:
             - containerPort: 1883
           readinessProbe:

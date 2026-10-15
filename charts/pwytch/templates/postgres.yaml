@@ -45,12 +45,11 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "pwytch.podLabels" . | nindent 8 }}
         {{- include "pwytch.selectorLabels" (dict "component" "postgres") | nindent 8 }}
     spec:
       containers:
         - name: postgres
-          image: {{ .Values.postgres.image }}
+          image: {{ .Values.postgres.image | quote }}
           ports:
             - containerPort: 5432
           envFrom:
@@ -84,4 +83,4 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.postgres.storage }}
+            storage: {{ .Values.postgres.storage | quote }}

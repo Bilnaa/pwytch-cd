@@ -4,25 +4,26 @@
   "required": ["environment", "commonLabels", "image", "postgres", "redis", "mosquitto"],
   "definitions": {
     "quantity": {
-      "description": "Quantité Kubernetes non nulle : 512Mi, 1Gi, 1.5Gi, 1G, 500M…",
-      "type": "string",
-      "pattern": "^(0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$"
+      "description": "Quantité Kubernetes non nulle : 512Mi, 1Gi, 1.5Gi, 1G, 500M, 1e9, 536870912…",
+      "oneOf": [
+        { "type": "string", "pattern": "^(0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E|[eE][0-9]+)?$" },
+        { "type": "number", "exclusiveMinimum": 0 }
+      ]
     },
     "cpu": {
-      "description": "CPU : 100m, 0.5, 1…",
+      "description": "CPU non nul : 100m, 0.5, 1…",
       "oneOf": [
-        { "type": "string", "pattern": "^([1-9][0-9]*m|[0-9]+(\\.[0-9]+)?)$" },
+        { "type": "string", "pattern": "^([1-9][0-9]*m|0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)$" },
         { "type": "number", "exclusiveMinimum": 0 }
       ]
     },
     "resourceList": {
+      "description": "cpu, memory, ephemeral-storage, ou toute autre ressource (hugepages-2Mi, nvidia.com/gpu…).",
       "type": "object",
       "properties": {
-        "cpu": { "$ref": "#/definitions/cpu" },
-        "memory": { "$ref": "#/definitions/quantity" },
-        "ephemeral-storage": { "$ref": "#/definitions/quantity" }
+        "cpu": { "$ref": "#/definitions/cpu" }
       },
-      "additionalProperties": false
+      "additionalProperties": { "$ref": "#/definitions/quantity" }
     },
     "resources": {
       "description": "requests et limits d'un conteneur, comme dans un manifest.",
@@ -71,11 +72,11 @@
           "minLength": 1
         },
         "databases": {
-          "description": "Une base par service, créée au premier démarrage si elle n'existe pas.",
+          "description": "Une base par service, créée au premier démarrage si elle n'existe pas. 63 caractères au plus : postgres tronque les noms plus longs.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$", "maxLength": 63 }
         },
         "storage": {
           "description": "Taille du volume, par exemple 1Gi.",

@@ -21,6 +21,8 @@ image:
 
 # --- Infra stateful : postgres, redis, mosquitto ---
 # Les noms des Services (postgres, redis, mqtt) sont fixes : les services les utilisent dans leurs URLs.
+# Copie de k8s/dev et k8s/prod (10-12), qu'ArgoCD déploie encore : jusqu'à la bascule sur le chart,
+# changer une image, une ressource ou une base ici ET dans k8s/, sinon les deux divergent.
 
 postgres:
   image: postgres:18.0-alpine
