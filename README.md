@@ -52,7 +52,7 @@ Les flèches viennent du ConfigMap `pwytch-config` et des variables des Deployme
 | `redis` | cache | Deployment, sans volume |
 | `mosquitto` (Service `mqtt`) | broker MQTT, messages en direct | Deployment, sans volume |
 | `stream-lives`, `replay-files` | fichiers des lives (écrits par stream, lus par replay) et des replays | PVC 1 Gi |
-| Ingress `pwytch` | `pwytch.test` / `pwytch.prd` vers `main:8000` | Ingress (nginx) |
+| Ingress `pwytch` | `pwytch.test` / `pwytch.prd` vers `main:8000`, en https (Secret `pwytch-tls`) | Ingress (nginx) |
 
 Chaque service a trois probes HTTP (startup, readiness, liveness), voir [Vérifier](#vérifier-les-ressources).
 
@@ -75,10 +75,11 @@ Les manifests de `k8s/` sont en YAML simple. Le chart `charts/pwytch` les repren
 - Probes : startup, readiness et liveness sur la route `probePath` de chaque service (`/api` pour main, `/health` pour les autres). Délais et seuils dans `probes` des values.
 - Volumes : `volumes` crée un PVC par entrée (`stream-lives`, `replay-files`, taille dans les values). stream écrit les lives, replay les lit en lecture seule et écrit ses replays. Chaque volume est monté au chemin de la clé du ConfigMap que lit l'appli (`LIVES_DIR`, `REPLAYS_DIR`). Les PVC sont gardés par `helm uninstall`.
 - Autoscaling de main : `services.main.autoscaling.enabled=true` ajoute un HPA sur le CPU (min, max, seuil dans les values) et retire `replicas` du Deployment. Il faut metrics-server (`minikube addons enable metrics-server`).
+- Ingress : `ingress` des values, vers `services.<ingress.service>` (main). `ingress.host` est donné par environnement (`pwytch.test`, `pwytch.prd`). `ingress.tls` active https avec le Secret `pwytch-tls` créé à la main ; `FRONTEND_ORIGIN` doit suivre (`https://<host>`).
 
 Le label `environment` vient du namespace (`-n dev` ou `-n prod`). `image.tag` (sha complet du repo CI) n'a pas de valeur par défaut : chaque environnement donne le sien. `values.schema.json` vérifie les values (dev/prod, sha de 40 caractères).
 
-Un fichier de values par environnement, `values-dev.yaml` et `values-prod.yaml`, ne surcharge que ce qui change : `environment`, `image.tag` et `FRONTEND_ORIGIN`. Ce sont des copies de `k8s/dev` et `k8s/prod` : jusqu'à la bascule sur le chart, un changement se fait aux deux endroits. Installer un fichier dans le mauvais namespace (`-n dev -f values-prod.yaml`) échoue.
+Un fichier de values par environnement, `values-dev.yaml` et `values-prod.yaml`, ne surcharge que ce qui change : `environment`, `image.tag`, `FRONTEND_ORIGIN` et `ingress.host`. Ce sont des copies de `k8s/dev` et `k8s/prod` : jusqu'à la bascule sur le chart, un changement se fait aux deux endroits. Installer un fichier dans le mauvais namespace (`-n dev -f values-prod.yaml`) échoue.
 
 ```bash
 helm lint charts/pwytch -n dev -f charts/pwytch/values-dev.yaml
@@ -152,6 +153,23 @@ kubectl -n $NS create secret generic jwt \
   --from-literal=secret="$(openssl rand -hex 32)"
 ```
 
+Certificat https de l'Ingress (Secret `pwytch-tls`, le même dans les deux namespaces). Il est signé par une autorité locale, que la machine du navigateur doit approuver : sans https, le navigateur bloque la caméra et le micro (`navigator.mediaDevices` absent, page go-live en erreur). Les fichiers restent hors du repo (`~/.pwytch-certs`) ; `ca.key` ne sort pas de cette machine.
+
+```bash
+D=~/.pwytch-certs; mkdir -p $D; cd $D
+# autorité locale, une seule fois
+openssl req -x509 -new -nodes -newkey rsa:2048 -keyout ca.key -out ca.crt -days 825 -subj "/CN=Pwytch Local CA" \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+# certificat de pwytch.test et pwytch.prd
+openssl req -new -nodes -newkey rsa:2048 -keyout tls.key -out tls.csr -subj "/CN=pwytch.test"
+printf "subjectAltName=DNS:pwytch.test,DNS:pwytch.prd\nextendedKeyUsage=serverAuth\n" > ext.cnf
+openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 825 -extfile ext.cnf
+
+kubectl -n $NS create secret tls pwytch-tls --cert=tls.crt --key=tls.key
+```
+
+Puis approuver `ca.crt` sur chaque machine qui ouvre le navigateur : Windows `certutil -user -addstore Root ca.crt`, macOS `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt`, Linux `sudo cp ca.crt /usr/local/share/ca-certificates/pwytch.crt && sudo update-ca-certificates` (Firefox a son propre magasin : Paramètres > Certificats > Importer). Relancer le navigateur.
+
 Le namespace doit exister (étape 1). Pour refaire un secret : `kubectl -n $NS delete secret <nom>`, le recréer, puis `kubectl -n $NS rollout restart deployment`. Le mot de passe postgres n'est lu qu'à la création du volume : si on le change, il faut aussi supprimer le volume (`kubectl -n $NS delete pvc data-postgres-0`).
 
 ## Vérifier les ressources
@@ -164,7 +182,7 @@ kubectl get deploy,statefulset -n dev         # 7 services + redis + mosquitto, 
 kubectl get svc -n dev                        # un Service ClusterIP par brique
 kubectl get ingress -n dev                    # host pwytch.test (pwytch.prd en prod)
 kubectl get pvc -n dev                        # data-postgres-0, replay-files, stream-lives : Bound
-kubectl get secret -n dev                     # database-urls, jwt, postgres-credentials
+kubectl get secret -n dev                     # database-urls, jwt, postgres-credentials, pwytch-tls
 kubectl get ns                                # dev, prod (et argocd si installé)
 kubectl -n dev rollout status deploy/main     # attend / confirme un déploiement
 kubectl -n dev describe pod -l app=main       # probes, événements, raison d'un redémarrage
@@ -174,7 +192,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl http://pwytch.test/api/health
+curl --cacert ~/.pwytch-certs/ca.crt https://pwytch.test/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -195,11 +213,11 @@ Workflows et runner : onglet Actions du repo, ou sur la machine du runner : `sys
 
 | Environnement | URL |
 |---|---|
-| dev | http://pwytch.test |
-| prod | http://pwytch.prd |
+| dev | https://pwytch.test |
+| prod | https://pwytch.prd |
 | ArgoCD | http://127.0.0.1:8081 (service `argocd-forward`, détails : [`argocd/README.md`](argocd/README.md)) |
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.test` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.test` pour dev et `https://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`. http redirige vers https : la page go-live utilise la caméra et le micro, que le navigateur n'autorise qu'en https (ou sur `localhost`). Le certificat et l'autorité locale à approuver sont décrits dans [Secrets](#secrets-détail-de-létape-2).
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
@@ -207,9 +225,9 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 <IP de la machine qui héberge Minikube>  pwytch.test pwytch.prd
 ```
 
-Le domaine `.dev` est à éviter : les navigateurs le forcent en https (liste HSTS préchargée), alors que les environnements ne sont servis qu'en http. `.test` est réservé à cet usage.
+Le domaine `.dev` est à éviter : il appartient à Google et les navigateurs le forcent en https (liste HSTS préchargée). `.test` est réservé à cet usage.
 
-Le contrôleur d'ingress est exposé sur le port **80** de la machine qui héberge Minikube, par un service systemd (`ingress-80`, un `kubectl port-forward` lié à l'adresse de cette machine). Si la page ne répond plus, vérifier ce service : `systemctl status ingress-80`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** le service.
+Le contrôleur d'ingress est exposé sur les ports **80** et **443** de la machine qui héberge Minikube, par des services systemd (`ingress-80`, `ingress-443` : des `kubectl port-forward` liés à l'adresse de cette machine). Si la page ne répond plus, vérifier ces services : `systemctl status ingress-80 ingress-443`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** le service.
 
 ## ArgoCD
 

@@ -1,0 +1,34 @@
+{{- /* Point d'entrée de l'environnement : tout passe par main, qui sert le front et /api */}}
+{{- with .Values.ingress }}
+{{- if .enabled }}
+{{- if not (hasKey $.Values.services .service) }}
+{{- fail (printf "ingress.service : le service %q n'existe pas dans services" .service) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .name }}
+  namespace: {{ include "pwytch.namespace" $ }}
+  labels:
+    {{- include "pwytch.labels" $ | nindent 4 }}
+spec:
+  ingressClassName: {{ .className }}
+  {{- if .tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .host | quote }}
+      secretName: {{ .tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ required "ingress.host est obligatoire (pwytch.test en dev, pwytch.prd en prod)" .host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .service }}
+                port:
+                  number: {{ (get $.Values.services .service).port }}
+{{- end }}
+{{- end }}

@@ -1,4 +1,7 @@
 # Point d'entrée de l'environnement : tout passe par main, qui sert le front et /api.
+# En https : le navigateur n'autorise la caméra et le micro (getUserMedia, page go-live) que dans un contexte sécurisé.
+# Le Secret pwytch-tls (certificat de pwytch.test et pwytch.prd) est créé à la main, jamais dans Git (voir le README).
+# http redirige vers https (comportement par défaut d'ingress-nginx quand tls est renseigné).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,6 +9,10 @@ metadata:
   namespace: dev
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - pwytch.test
+      secretName: pwytch-tls
   rules:
     - host: pwytch.test
       http:

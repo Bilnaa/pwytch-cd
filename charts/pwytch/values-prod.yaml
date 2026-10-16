@@ -9,4 +9,7 @@ image:
 
 config:
   data:
-    FRONTEND_ORIGIN: http://pwytch.prd
+    FRONTEND_ORIGIN: https://pwytch.prd
+
+ingress:
+  host: pwytch.prd
