@@ -25,7 +25,7 @@ spec:
             limits: { memory: 64Mi }
       containers:
         - name: stats
-          image: ghcr.io/bilnaa/pwytch-stats:e68b75b6e41ac90669c4661cb3c65f7ff65cce1f
+          image: ghcr.io/bilnaa/pwytch-stats:0614b7574f612b5da4b6dcbe61f142104b6f7f0a
           ports:
             - containerPort: 8000
           env:
