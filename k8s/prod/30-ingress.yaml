@@ -6,6 +6,11 @@ metadata:
   namespace: prod
 spec:
   ingressClassName: nginx
+  # https obligatoire pour la caméra et le micro (getUserMedia) ; le http est redirigé vers le https
+  tls:
+    - hosts:
+        - pwytch.prd
+      secretName: pwytch-tls # créé à la main avec mkcert, jamais dans Git
   rules:
     - host: pwytch.prd
       http:

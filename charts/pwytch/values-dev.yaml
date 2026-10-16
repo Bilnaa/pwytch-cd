@@ -9,4 +9,4 @@ image:
 
 config:
   data:
-    FRONTEND_ORIGIN: http://pwytch.test
+    FRONTEND_ORIGIN: https://pwytch.test

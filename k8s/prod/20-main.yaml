@@ -14,7 +14,7 @@ spec:
         app: main
       annotations:
         # FRONTEND_ORIGIN vient du ConfigMap, lu au démarrage : changer cette valeur force le redémarrage de main
-        config-rev: "5"
+        config-rev: "6"
     spec:
       # sinon k8s injecte MQTT_PORT=tcp://... depuis le Service mqtt, ce qui casse la config des applis
       enableServiceLinks: false

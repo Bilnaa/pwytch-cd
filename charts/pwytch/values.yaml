@@ -67,7 +67,7 @@ config:
     STATS_URL: http://stats:8000
     BOOKMARKS_URL: http://bookmarks:8000
     # origine du front autorisée par main (CORS) : pwytch.test en dev, pwytch.prd en prod
-    FRONTEND_ORIGIN: http://pwytch.test
+    FRONTEND_ORIGIN: https://pwytch.test
     MQTT_HOST: mqtt
     REDIS_URL: redis://redis:6379/0
     LIVES_DIR: /data/lives

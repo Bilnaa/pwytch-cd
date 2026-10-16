@@ -128,7 +128,7 @@ Changer une valeur du ConfigMap ou d'une image : modifier le manifest, commit su
 
 ### Secrets (détail de l'étape 2)
 
-Les secrets ne sont dans aucun fichier : on les crée à la main, une fois par namespace, avant de déployer. Les valeurs sont aléatoires. Les noms sont ceux que les manifests référencent (`postgres-credentials`, `database-urls`, `jwt`).
+Les secrets ne sont dans aucun fichier : on les crée à la main, une fois par namespace, avant de déployer. Les valeurs sont aléatoires. Les noms sont ceux que les manifests référencent (`postgres-credentials`, `database-urls`, `jwt`, et `pwytch-tls` pour le certificat https, voir [Certificat https](#certificat-https)).
 
 ```bash
 NS=dev   # puis NS=prod
@@ -174,7 +174,7 @@ kubectl -n dev get events --sort-by=.lastTimestamp | tail
 Santé applicative : `/api/health` de `main` interroge la base, le broker et les 5 autres services.
 
 ```bash
-curl http://pwytch.test/api/health
+curl https://pwytch.test/api/health
 # {"status":"ok","database":"ok","broker":"ok","satellites":{"stream":"ok","search":"ok","replay":"ok","stats":"ok","live-chat":"ok"}}
 ```
 
@@ -195,11 +195,11 @@ Workflows et runner : onglet Actions du repo, ou sur la machine du runner : `sys
 
 | Environnement | URL |
 |---|---|
-| dev | http://pwytch.test |
-| prod | http://pwytch.prd |
+| dev | https://pwytch.test |
+| prod | https://pwytch.prd |
 | ArgoCD | http://127.0.0.1:8081 (service `argocd-forward`, détails : [`argocd/README.md`](argocd/README.md)) |
 
-Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `http://pwytch.test` pour dev et `http://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
+Chaque environnement a son Ingress (ingress-nginx, addon `minikube addons enable ingress`) : `https://pwytch.test` pour dev et `https://pwytch.prd` pour prod. Tout passe par `main`, qui sert le front et `/api`.
 
 Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvre le navigateur, dans `/etc/hosts` :
 
@@ -207,9 +207,24 @@ Les noms ne sont pas dans un DNS : il faut les déclarer sur la machine qui ouvr
 <IP de la machine qui héberge Minikube>  pwytch.test pwytch.prd
 ```
 
-Le domaine `.dev` est à éviter : les navigateurs le forcent en https (liste HSTS préchargée), alors que les environnements ne sont servis qu'en http. `.test` est réservé à cet usage.
+Le domaine `.dev` est à éviter : il est dans la liste HSTS préchargée des navigateurs, qui refusent alors tout certificat non reconnu publiquement. `.test` est réservé à cet usage.
 
-Le contrôleur d'ingress est exposé sur le port **80** de la machine qui héberge Minikube, par un service systemd (`ingress-80`, un `kubectl port-forward` lié à l'adresse de cette machine). Si la page ne répond plus, vérifier ce service : `systemctl status ingress-80`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** le service.
+Le contrôleur d'ingress est exposé sur les ports **443** (https) et **80** (http, redirigé vers https) de la machine qui héberge Minikube, par deux services systemd (`ingress-443` et `ingress-80`, des `kubectl port-forward` liés à l'adresse de cette machine). Si la page ne répond plus, vérifier ces services : `systemctl status ingress-443 ingress-80`. Si l'adresse de la machine change, mettre à jour `/etc/hosts` **et** les services.
+
+### Certificat https
+
+Le https est obligatoire : le navigateur ne donne accès à la caméra et au micro (`navigator.mediaDevices.getUserMedia`, page `/go-live`) qu'en https ou sur `localhost`. En http, `navigator.mediaDevices` vaut `undefined`.
+
+Le certificat est émis par [mkcert](https://github.com/FiloSottile/mkcert), une autorité locale. Il n'est pas dans Git : il est créé à la main, une fois, comme les autres secrets.
+
+```bash
+mkcert -cert-file tls.crt -key-file tls.key pwytch.test pwytch.prd
+kubectl -n dev create secret tls pwytch-tls --cert=tls.crt --key=tls.key
+kubectl -n prod create secret tls pwytch-tls --cert=tls.crt --key=tls.key
+rm tls.crt tls.key
+```
+
+Chaque machine qui ouvre le navigateur doit approuver cette autorité : copier `rootCA.pem` (dossier donné par `mkcert -CAROOT`) puis, sur cette machine, `CAROOT=<dossier> mkcert -install`. Ne copier que `rootCA.pem`, jamais `rootCA-key.pem` : cette clé permet de signer un certificat pour n'importe quel site. Sans le secret `pwytch-tls`, ingress-nginx sert son certificat auto-signé par défaut (avertissement du navigateur).
 
 ## ArgoCD
 
@@ -256,7 +271,7 @@ Jamais dans Git, y compris chiffrés : créés une fois par namespace avec des v
 ### Autres détails
 
 - `enableServiceLinks: false` : sinon Kubernetes injecte `MQTT_PORT=tcp://...` depuis le Service `mqtt`, ce qui casse la config des applis.
-- Ingress sur le port 80 : voir [Accéder aux applications](#accéder-aux-applications).
+- Ingress sur les ports 443 et 80 : voir [Accéder aux applications](#accéder-aux-applications).
 - Le host de l'Ingress est le même que `FRONTEND_ORIGIN` du ConfigMap (CORS).
 
 ## Règles
